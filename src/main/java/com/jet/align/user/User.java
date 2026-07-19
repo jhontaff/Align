@@ -1,13 +1,18 @@
 package com.jet.align.user;
 
 import com.jet.align.common.model.BaseEntity;
+import com.jet.align.task.Task;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -54,5 +59,17 @@ public class User extends BaseEntity implements  UserDetails {
     @Builder.Default
     private boolean enabled = true;
 
+    @OneToMany(mappedBy = "user")
+    private List<Task> tasks = new ArrayList<>();
 
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of();
+    }
+
+    @Override
+    public String getUsername() {
+        return email;
+    }
 }

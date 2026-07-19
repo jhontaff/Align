@@ -12,5 +12,8 @@ CREATE TABLE tasks (
                        title VARCHAR(255) NOT NULL,
                        description TEXT,
                        created_at TIMESTAMP,
-                       updated_at TIMESTAMP
+                       updated_at TIMESTAMP,
+                       priority VARCHAR(50) NOT NULL,
+                       status VARCHAR(50) NOT NULL,
+                       due_date DATE
 );

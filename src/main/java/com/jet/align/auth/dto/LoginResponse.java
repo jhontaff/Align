@@ -1,4 +1,4 @@
-package com.jet.align.auth;
+package com.jet.align.auth.dto;
 
 public class LoginResponse {
 }
