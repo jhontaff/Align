@@ -1,33 +1,21 @@
 package com.jet.align.task;
 
 import com.jet.align.task.enums.Priority;
-import com.jet.align.task.enums.Status;
-import jakarta.persistence.*;
-import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import com.jet.align.task.enums.TaskStatus;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
 
-@Entity(name="task")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class TaskResponse {
+public record TaskResponse(
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    @Valid()
-    private String title;
-    private String description;
-    @Enumerated(EnumType.STRING)
-    private Status status;
-    @Enumerated(EnumType.STRING)
-    private Priority priority;
-    private LocalDate dueDate;
+        UUID id,
+        String title,
+        String description,
+        TaskStatus taskStatus,
+        Priority priority,
+        LocalDate dueDate,
+        Instant createdAt,
+        Instant updatedAt
 
-}
+) {}

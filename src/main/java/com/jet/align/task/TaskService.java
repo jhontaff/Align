@@ -1,33 +1,35 @@
 package com.jet.align.task;
 
-import com.jet.align.task.enums.Priority;
-import com.jet.align.task.enums.Status;
-import jakarta.persistence.*;
-import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import com.jet.align.common.exception.ResourceNotFoundException;
+import com.jet.align.task.enums.TaskStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
+import java.util.UUID;
 
-@Entity(name="task")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Service
+@Transactional(readOnly = true)
 public class TaskService {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    @Valid()
-    private String title;
-    private String description;
-    @Enumerated(EnumType.STRING)
-    private Status status;
-    @Enumerated(EnumType.STRING)
-    private Priority priority;
-    private LocalDate dueDate;
+    private final TaskRepository repository;
+    private final TaskMapper mapper;
+
+    public TaskService(TaskRepository repository, TaskMapper mapper) {
+        this.repository = repository;
+        this.mapper = mapper;
+    }
+
+    @Transactional
+    public TaskResponse createTask(TaskRequest taskRequest) {
+        Task task = mapper.toEntity(taskRequest);
+        task.setStatus(TaskStatus.PENDING);
+        Task savedTask = repository.save(task);
+        return mapper.toResponse(savedTask);
+    }
+    @Transactional(readOnly = true)
+    public TaskResponse findById(UUID id) {
+        Task task = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
+        return mapper.toResponse(task);
+    }
 
 }

@@ -6,3 +6,11 @@ CREATE TABLE IF NOT EXISTS example (
     name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
+
+CREATE TABLE tasks (
+                       id UUID PRIMARY KEY,
+                       title VARCHAR(255) NOT NULL,
+                       description TEXT,
+                       created_at TIMESTAMP,
+                       updated_at TIMESTAMP
+);

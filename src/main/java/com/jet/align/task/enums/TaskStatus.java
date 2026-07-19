@@ -1,6 +1,6 @@
 package com.jet.align.task.enums;
 
-public enum Status {
+public enum TaskStatus {
     PENDING,
     IN_PROGRESS,
     COMPLETED

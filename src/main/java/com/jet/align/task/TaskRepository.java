@@ -1,33 +1,10 @@
 package com.jet.align.task;
 
-import com.jet.align.task.enums.Priority;
-import com.jet.align.task.enums.Status;
-import jakarta.persistence.*;
-import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
-import java.time.LocalDate;
+import java.util.UUID;
 
-@Entity(name="task")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class TaskRepository {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    @Valid()
-    private String title;
-    private String description;
-    @Enumerated(EnumType.STRING)
-    private Status status;
-    @Enumerated(EnumType.STRING)
-    private Priority priority;
-    private LocalDate dueDate;
-
+@Repository
+public interface TaskRepository extends JpaRepository<Task, UUID> {
 }

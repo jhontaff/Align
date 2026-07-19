@@ -1,33 +1,34 @@
 package com.jet.align.task;
 
-import com.jet.align.task.enums.Priority;
-import com.jet.align.task.enums.Status;
-import jakarta.persistence.*;
-import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
-
-@Entity(name="task")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Component
 public class TaskMapper {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    @Valid()
-    private String title;
-    private String description;
-    @Enumerated(EnumType.STRING)
-    private Status status;
-    @Enumerated(EnumType.STRING)
-    private Priority priority;
-    private LocalDate dueDate;
+    public Task toEntity(TaskRequest request) {
+
+        Task task = new Task();
+
+        task.setTitle(request.title());
+        task.setDescription(request.description());
+        task.setPriority(request.priority());
+        task.setDueDate(request.dueDate());
+
+        return task;
+    }
+
+    public TaskResponse toResponse(Task task) {
+
+        return new TaskResponse(
+                task.getId(),
+                task.getTitle(),
+                task.getDescription(),
+                task.getStatus(),
+                task.getPriority(),
+                task.getDueDate(),
+                task.getCreatedAt(),
+                task.getUpdatedAt()
+        );
+    }
 
 }

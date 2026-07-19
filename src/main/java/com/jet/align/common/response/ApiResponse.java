@@ -9,26 +9,41 @@ public record ApiResponse<T>(
         int status,
         boolean success,
         String message,
-        T data
+        T data,
+        Object errors
 ) {
 
-    public static <T> ApiResponse<T> success(HttpStatus status, String message, T data) {
+    public static <T> ApiResponse<T> success(HttpStatus status,
+                                             String message,
+                                             T data) {
+
         return new ApiResponse<>(
                 Instant.now(),
                 status.value(),
                 true,
                 message,
-                data
+                data,
+                null
         );
     }
 
-    public static <T> ApiResponse<T> error(HttpStatus status, String message) {
+    public static <T> ApiResponse<T> error(HttpStatus status,
+                                           String message,
+                                           Object errors) {
+
         return new ApiResponse<>(
                 Instant.now(),
                 status.value(),
                 false,
                 message,
-                null
+                null,
+                errors
         );
+    }
+
+    public static <T> ApiResponse<T> error(HttpStatus status,
+                                           String message) {
+
+        return error(status, message, null);
     }
 }

@@ -56,11 +56,11 @@ public class GlobalExceptionHandler {
                 .forEach(error ->
                         errors.put(error.getField(), error.getDefaultMessage()));
 
-        return ResponseEntity
-                .badRequest()
+        return ResponseEntity.badRequest()
                 .body(ApiResponse.error(
                         HttpStatus.BAD_REQUEST,
-                        ex.getMessage()
+                        "Validation failed.",
+                        errors
                 ));
     }
     @ExceptionHandler(BusinessException.class)
