@@ -1,35 +1,16 @@
 package com.jet.align.task;
 
-import com.jet.align.common.exception.ResourceNotFoundException;
-import com.jet.align.task.enums.TaskStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import com.jet.align.user.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
 
-@Service
-@Transactional(readOnly = true)
-public class TaskService {
+public interface TaskService {
 
-    private final TaskRepository repository;
-    private final TaskMapper mapper;
+    public TaskResponse createTask(TaskRequest request, User user);
 
-    public TaskService(TaskRepository repository, TaskMapper mapper) {
-        this.repository = repository;
-        this.mapper = mapper;
-    }
+    public TaskResponse getTaskById (UUID id, User user);
 
-    @Transactional
-    public TaskResponse createTask(TaskRequest taskRequest) {
-        Task task = mapper.toEntity(taskRequest);
-        task.setStatus(TaskStatus.PENDING);
-        Task savedTask = repository.save(task);
-        return mapper.toResponse(savedTask);
-    }
-    @Transactional(readOnly = true)
-    public TaskResponse findById(UUID id) {
-        Task task = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
-        return mapper.toResponse(task);
-    }
-
+    public Page<TaskResponse> getTasks(User user, Pageable pageable);
 }

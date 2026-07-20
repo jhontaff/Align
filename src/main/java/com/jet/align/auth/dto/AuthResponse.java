@@ -1,7 +1,11 @@
 package com.jet.align.auth.dto;
 
+import java.time.Instant;
+
 public record AuthResponse(
 
-        String message
+        String accessToken,
+        String tokenType,
+        Instant expiresAt
 
 ) {}
