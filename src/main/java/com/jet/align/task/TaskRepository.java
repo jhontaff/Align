@@ -1,5 +1,6 @@
 package com.jet.align.task;
 
+import com.jet.align.task.enums.TaskStatus;
 import com.jet.align.user.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,4 +14,9 @@ import java.util.UUID;
 public interface TaskRepository extends JpaRepository<Task, UUID> {
     Optional<Task> findByIdAndUser(UUID id, User user);
     Page<Task> findAllByUser(User user, Pageable pageable);
+    Page<Task> findAllByUserAndStatus(
+            User user,
+            TaskStatus status,
+            Pageable pageable
+    );
 }

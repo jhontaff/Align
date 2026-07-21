@@ -1,5 +1,8 @@
 package com.jet.align.task;
 
+import com.jet.align.task.model.TaskRequest;
+import com.jet.align.task.model.TaskResponse;
+import com.jet.align.task.model.TaskUpdateRequest;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -30,5 +33,16 @@ public class TaskMapper {
                 task.getUpdatedAt()
         );
     }
+    public void updateEntity(TaskUpdateRequest request, Task task) {
 
+        if (request == null) {
+            return;
+        }
+
+        task.setTitle(request.title());
+        task.setDescription(request.description());
+        task.setStatus(request.status());
+        task.setPriority(request.priority());
+        task.setDueDate(request.dueDate());
+    }
 }

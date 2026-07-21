@@ -1,4 +1,4 @@
-package com.jet.align.task;
+package com.jet.align.task.model;
 
 import com.jet.align.task.enums.Priority;
 import com.jet.align.task.enums.TaskStatus;
@@ -12,7 +12,7 @@ public record TaskResponse(
         UUID id,
         String title,
         String description,
-        TaskStatus taskStatus,
+        TaskStatus status,
         Priority priority,
         LocalDate dueDate,
         Instant createdAt,

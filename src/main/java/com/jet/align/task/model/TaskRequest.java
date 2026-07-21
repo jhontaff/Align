@@ -1,4 +1,4 @@
-package com.jet.align.task;
+package com.jet.align.task.model;
 
 import com.jet.align.task.enums.Priority;
 import jakarta.validation.constraints.NotBlank;
