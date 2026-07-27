@@ -12,9 +12,9 @@ import java.util.stream.Collectors;
 @Component
 public class ToolRegistry {
 
-    private final Map<String, Tool> tools;
+    private final Map<String, Tool<?>> tools;
 
-    public ToolRegistry(List<Tool> tools) {
+    public ToolRegistry(List<Tool<?>> tools) {
         this.tools = tools.stream().collect(Collectors.toUnmodifiableMap(
                 Tool::name, Function.identity(),
                 (first, second) -> {
@@ -23,11 +23,11 @@ public class ToolRegistry {
                 }));
     }
 
-    public Optional<Tool> get(String name) {
+    public Optional<Tool<?>> get(String name) {
         return Optional.ofNullable(tools.get(name));
     }
 
-    public Collection<Tool> getAll() {
+    public Collection<Tool<?>> getAll() {
         return tools.values();
     }
 }

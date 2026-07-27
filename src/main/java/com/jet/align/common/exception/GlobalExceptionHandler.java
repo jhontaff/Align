@@ -37,6 +37,28 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(AgentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAgentException(AgentException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(
+                        HttpStatus.BAD_REQUEST,
+                        ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(LlmException.class)
+    public ResponseEntity<ApiResponse<Void>> handleLlmException(LlmException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(
+                        HttpStatus.BAD_REQUEST,
+                        ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
 

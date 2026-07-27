@@ -22,6 +22,10 @@ target/
 ## Properties files #
 *.properties
 
+##Gitignore
+/application-dev.properties
+
+
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
@@ -34,3 +38,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Graphify ###
+graphify-out/

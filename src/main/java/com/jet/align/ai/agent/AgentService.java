@@ -1,11 +1,8 @@
 package com.jet.align.ai.agent;
 
-import com.jet.align.ai.tool.ToolContext;
-import com.jet.align.ai.tool.ToolResult;
+import com.jet.align.user.User;
 
 public interface AgentService {
-    ToolResult<?> execute(
-            String toolName,
-            ToolContext context
-    );
+
+    AgentResponse chat(String userMessage, User user);
 }
