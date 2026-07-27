@@ -1,48 +1,18 @@
 package com.jet.align.task;
 
-import com.jet.align.task.model.TaskRequest;
-import com.jet.align.task.model.TaskResponse;
-import com.jet.align.task.model.TaskUpdateRequest;
-import org.springframework.stereotype.Component;
+import com.jet.align.task.dto.TaskRequest;
+import com.jet.align.task.dto.TaskResponse;
+import com.jet.align.task.dto.TaskUpdateRequest;
+import org.mapstruct.Mapper;
+import org.mapstruct.MappingTarget;
 
-@Component
-public class TaskMapper {
+@Mapper(componentModel = "spring")
+public interface TaskMapper {
 
-    public Task toEntity(TaskRequest request) {
+    Task toEntity(TaskRequest request);
 
-        Task task = new Task();
+    TaskResponse toResponse(Task task);
 
-        task.setTitle(request.title());
-        task.setDescription(request.description());
-        task.setPriority(request.priority());
-        task.setDueDate(request.dueDate());
+    void updateEntity(TaskUpdateRequest request, @MappingTarget Task task);
 
-        return task;
-    }
-
-    public TaskResponse toResponse(Task task) {
-
-        return new TaskResponse(
-                task.getId(),
-                task.getTitle(),
-                task.getDescription(),
-                task.getStatus(),
-                task.getPriority(),
-                task.getDueDate(),
-                task.getCreatedAt(),
-                task.getUpdatedAt()
-        );
-    }
-    public void updateEntity(TaskUpdateRequest request, Task task) {
-
-        if (request == null) {
-            return;
-        }
-
-        task.setTitle(request.title());
-        task.setDescription(request.description());
-        task.setStatus(request.status());
-        task.setPriority(request.priority());
-        task.setDueDate(request.dueDate());
-    }
 }

@@ -1,4 +1,6 @@
-package com.jet.align.user;
+package com.jet.align.user.dto;
+
+import com.jet.align.user.Role;
 
 import java.util.UUID;
 

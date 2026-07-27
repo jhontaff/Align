@@ -44,7 +44,7 @@ public class GeminiLlmClient implements LlmClient {
     @Override
     public LlmResponse chat(LlmRequest request) {
         GeminiApi.GenerateContentResponse response = geminiRestClient.post()
-                .uri("/models/{model}:generateContent", properties.model())
+                .uri("/models/{dto}:generateContent", properties.model())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(toGeminiRequest(request))
                 .retrieve()
@@ -85,7 +85,7 @@ public class GeminiLlmClient implements LlmClient {
             case SystemMessage ignored -> throw new IllegalStateException("SystemMessage debe filtrarse antes");
             case UserMessage(String content) -> new GeminiApi.Content(
                     "user", List.of(new GeminiApi.Part(content, null, null)));
-            case AssistantMessage assistant -> new GeminiApi.Content("model", assistantParts(assistant));
+            case AssistantMessage assistant -> new GeminiApi.Content("dto", assistantParts(assistant));
             case ToolMessage(String toolCallId, String content) -> new GeminiApi.Content(
                     "user", List.of(new GeminiApi.Part(
                             null, null, new GeminiApi.FunctionResponse(toolCallId, Map.of("content", content)))));

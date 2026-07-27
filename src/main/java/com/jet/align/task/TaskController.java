@@ -1,10 +1,10 @@
 package com.jet.align.task;
 
 import com.jet.align.common.response.ApiResponse;
-import com.jet.align.task.model.TaskRequest;
-import com.jet.align.task.model.TaskResponse;
-import com.jet.align.task.model.TaskUpdateRequest;
 import com.jet.align.task.enums.TaskStatus;
+import com.jet.align.task.dto.TaskRequest;
+import com.jet.align.task.dto.TaskResponse;
+import com.jet.align.task.dto.TaskUpdateRequest;
 import com.jet.align.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

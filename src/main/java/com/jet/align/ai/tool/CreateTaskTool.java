@@ -5,8 +5,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jet.align.task.TaskService;
-import com.jet.align.task.model.TaskRequest;
-import com.jet.align.task.model.TaskResponse;
+import com.jet.align.task.dto.TaskRequest;
+import com.jet.align.task.dto.TaskResponse;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,7 +18,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CreateTaskTool implements Tool<TaskResponse> {
 
-    private static final Logger log = LoggerFactory.getLogger(TaskService.class);
+    private static final Logger log = LoggerFactory.getLogger(CreateTaskTool.class);
 
 
     private static final String PARAMETERS_SCHEMA = """

@@ -6,7 +6,7 @@ import com.jet.align.auth.dto.RegisterRequest;
 import com.jet.align.common.response.ApiResponse;
 import com.jet.align.user.User;
 import com.jet.align.user.UserMapper;
-import com.jet.align.user.UserResponse;
+import com.jet.align.user.dto.UserResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

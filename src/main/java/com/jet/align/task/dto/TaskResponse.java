@@ -1,4 +1,4 @@
-package com.jet.align.task.model;
+package com.jet.align.task.dto;
 
 import com.jet.align.task.enums.Priority;
 import com.jet.align.task.enums.TaskStatus;
