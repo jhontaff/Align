@@ -1,24 +1,24 @@
 package com.jet.align.ai.tool;
 
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jet.align.task.TaskService;
-import com.jet.align.task.dto.TaskRequest;
 import com.jet.align.task.dto.TaskResponse;
+import com.jet.align.task.dto.TaskUpdateRequest;
+import com.jet.align.task.enums.Priority;
+import com.jet.align.task.enums.TaskStatus;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
-public class CreateTaskTool implements Tool<TaskResponse> {
+public class UpdateTaskTool implements Tool<TaskResponse> {
 
-    private static final Logger log = LoggerFactory.getLogger(CreateTaskTool.class);
     private final TaskService taskService;
     private final ObjectMapper objectMapper;
 
@@ -26,6 +26,10 @@ public class CreateTaskTool implements Tool<TaskResponse> {
             {
               "type": "object",
               "properties": {
+                "taskId": {
+                  "type": "string",
+                  "description": "The unique identifier of the task to update."
+                },
                 "title": {
                   "type": "string",
                   "description": "Short, clear title of the task.",
@@ -36,6 +40,11 @@ public class CreateTaskTool implements Tool<TaskResponse> {
                   "description": "Optional details about the task.",
                   "maxLength": 1000
                 },
+                "status":{
+                    "type": "string",
+                    "enum": ["PENDING", "IN_PROGRESS", "COMPLETED"],
+                    "description": "Current state of the task."
+                    },
                 "priority": {
                   "type": "string",
                   "enum": ["LOW", "MEDIUM", "HIGH"],
@@ -47,7 +56,7 @@ public class CreateTaskTool implements Tool<TaskResponse> {
                   "description": "Optional due date in ISO-8601 format (YYYY-MM-DD)."
                 }
               },
-              "required": ["title", "priority"],
+              "required": ["taskId"],
               "additionalProperties": false
             }
             """;
@@ -55,12 +64,12 @@ public class CreateTaskTool implements Tool<TaskResponse> {
 
     @Override
     public String name() {
-        return "create_task";
+        return "update_task";
     }
 
     @Override
     public String description() {
-        return "Creates a new task for the authenticated user.";
+        return "Updates an existing task for the authenticated user.";
     }
 
     @Override
@@ -71,30 +80,23 @@ public class CreateTaskTool implements Tool<TaskResponse> {
                     new TypeReference<Map<String, Object>>() {}
             );
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException(
-                    "Invalid JSON Schema for tool " + name(), e);
+            throw new RuntimeException("Failed to parse parameters schema", e);
         }
+
     }
 
     @Override
     public ToolResult<TaskResponse> execute(ToolContext context) {
-        TaskRequest request =
-                objectMapper.convertValue(
-                        context.arguments(),
-                        TaskRequest.class
-                );
-        TaskResponse response =
-                taskService.createTask(
-                        request,
-                        context.user()
-                );
-        return new ToolResult<>(
-                response,
-                "Task created successfully."
+        UUID taskId = UUID.fromString((String) context.arguments().get("taskId"));
+        TaskResponse current = taskService.getTaskById(taskId, context.user());
+        TaskUpdateRequest merged = new TaskUpdateRequest(
+                (String) context.arguments().getOrDefault("title", current.title()),
+                (String) context.arguments().getOrDefault("description", current.description()),
+                (TaskStatus) context.arguments().getOrDefault("status", current.status()),
+                (Priority) context.arguments().getOrDefault("priority", current.priority().name()),
+                (LocalDate) context.arguments().getOrDefault("dueDate", current.dueDate())
         );
-
+        TaskResponse updated = taskService.updateTask(taskId, merged, context.user());
+        return new ToolResult<>(updated, "Task updated successfully.");
     }
-
-
-
 }

@@ -59,6 +59,17 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(LlmUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleLlmUnavailable(LlmUnavailableException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
 

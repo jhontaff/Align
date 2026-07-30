@@ -10,11 +10,15 @@ import com.jet.align.ai.llm.ToolMessage;
 import com.jet.align.ai.llm.UserMessage;
 import com.jet.align.ai.model.ToolCall;
 import com.jet.align.common.exception.LlmException;
+import com.jet.align.common.exception.LlmUnavailableException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -43,12 +47,20 @@ public class GeminiLlmClient implements LlmClient {
 
     @Override
     public LlmResponse chat(LlmRequest request) {
-        GeminiApi.GenerateContentResponse response = geminiRestClient.post()
-                .uri("/models/{dto}:generateContent", properties.model())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(toGeminiRequest(request))
-                .retrieve()
-                .body(GeminiApi.GenerateContentResponse.class);
+        GeminiApi.GenerateContentResponse response;
+        try {
+            response = geminiRestClient.post()
+                    .uri("/models/{dto}:generateContent", properties.model())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(toGeminiRequest(request))
+                    .retrieve()
+                    .body(GeminiApi.GenerateContentResponse.class);
+        } catch (HttpClientErrorException.TooManyRequests | HttpServerErrorException e) {
+            throw new LlmUnavailableException(
+                    "Gemini no está disponible en este momento (rate limit o caída del proveedor).", e);
+        } catch (RestClientResponseException e) {
+            throw new LlmException("Gemini rechazó la solicitud: " + e.getMessage(), e);
+        }
 
         return toLlmResponse(response);
     }
