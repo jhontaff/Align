@@ -11,7 +11,6 @@ import com.jet.align.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,20 +29,15 @@ public class ConversationMemoryImpl implements ConversationMemory {
     @Override
     @Transactional(readOnly= true)
     public List<Message> loadHistory(User user) {
-        Optional<ConversationHistory> existing = conversationHistoryRepository.findByUser(user);
-        if (existing.isEmpty()) {
-            return List.of();
-        } else {
-            ConversationHistory history = existing.get();
-            String messagesJson = history.getHistoryJson();
-            try {
-                return objectMapper.readValue(messagesJson, new TypeReference<List<Message>>() {});
-            } catch (Exception e) {
-                throw new AgentException("Failed to deserialize conversation history");
-            }
-        }
+        return conversationHistoryRepository.findByUser(user)
+                .map(history -> readMessages(history.getHistoryJson()))
+                .orElse(List.of());
     }
 
+
+    // Lectura-modificación-escritura sin lock: aceptable porque hoy es
+    // un solo usuario interactuando secuencialmente. Si se agrega
+    // concurrencia real (multi-tab, reintentos), revisar con @Version.
     @Override
     @Transactional
     public void append(User user, List<Message> newMessages) {
@@ -53,31 +47,34 @@ public class ConversationMemoryImpl implements ConversationMemory {
         if (existing.isEmpty()) {
             history = new ConversationHistory();
             history.setUser(user);
-            try {
-                String newMessagessString = objectMapper.writeValueAsString(newMessages);
-                history.setHistoryJson(newMessagessString);
-            } catch (Exception e) {
-                throw new AgentException("Failed to serialize new messages");
-            }
+            history.setHistoryJson(writeMessages(newMessages));
             conversationHistoryRepository.save(history);
         } else {
             history = existing.get();
             String currentMessagesString = history.getHistoryJson();
-            List<Message> currentMessagesJson = new ArrayList<>();
-            try {
-                currentMessagesJson = objectMapper.readValue(currentMessagesString, new TypeReference<List<Message>>() {
-                });
-            } catch (Exception e) {
-                throw new AgentException("Failed to deserialize existing conversation history");
-            }
-            currentMessagesJson.addAll(newMessages);
-            try {
-                currentMessagesString = objectMapper.writeValueAsString(currentMessagesJson);
-            } catch (Exception e) {
-                throw new AgentException("Failed to serialize updated messages");
-            }
-            history.setHistoryJson(currentMessagesString);
+            List<Message> currentMessages = readMessages(currentMessagesString);
+
+            currentMessages.addAll(newMessages);
+
+            history.setHistoryJson(writeMessages(currentMessages));
             conversationHistoryRepository.save(history);
+        }
+    }
+
+    private List<Message> readMessages(String json){
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Message>>() {});
+        } catch (Exception e) {
+            throw new AgentException("Failed to deserialize conversation history", e);
+        }
+    }
+
+
+    private String writeMessages(List<Message> messages){
+        try {
+            return objectMapper.writeValueAsString(messages);
+        } catch (Exception e) {
+            throw new AgentException("Failed to serialize conversation history", e);
         }
     }
 

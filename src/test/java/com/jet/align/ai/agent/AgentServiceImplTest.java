@@ -3,13 +3,13 @@ package com.jet.align.ai.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jet.align.ai.agent.execution.ToolExecutionService;
 import com.jet.align.ai.agent.impl.AgentServiceImpl;
-import com.jet.align.ai.llm.AssistantMessage;
-import com.jet.align.ai.llm.LlmClient;
-import com.jet.align.ai.llm.LlmResponse;
-import com.jet.align.ai.llm.ToolMessage;
+import com.jet.align.ai.llm.*;
+import com.jet.align.ai.memory.ConversationMemory;
 import com.jet.align.ai.model.ToolCall;
 import com.jet.align.ai.tool.ToolRegistry;
 import com.jet.align.ai.tool.ToolResult;
+import com.jet.align.common.exception.AgentException;
+import com.jet.align.user.User;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentServiceImplTest {
 
@@ -26,7 +27,7 @@ class AgentServiceImplTest {
      *   2. el agente la ejecuta y le devuelve el resultado,
      *   3. el modelo, al ver el resultado, responde con texto final.
      *
-     * Todo con dobles de prueba: ni OpenAI, ni red, ni base de datos. Lo que
+     * To do con dobles de prueba: ni OpenAI, ni red, ni base de datos. Lo que
      * se prueba es la ORQUESTACIÓN, no la tool ni el proveedor.
      */
     @Test
@@ -34,12 +35,22 @@ class AgentServiceImplTest {
         // Registro de las tools que el agente realmente ejecutó, para verificar.
         List<ToolCall> executed = new ArrayList<>();
 
+        // Simula que ya existía una conversación previa con este usuario.
+        SpyConversationMemory memory = new SpyConversationMemory(List.of(
+                new UserMessage("Hola"),
+                new AssistantMessage("Hola, ¿en qué ayudo?", List.of())));
+
+        // Requests que el agente le mandó al LLM, para poder inspeccionarlas.
+        List<LlmRequest> requestsSeen = new ArrayList<>();
+
         // LlmClient falso y guionizado: si en la historia ya hay un ToolMessage
         // (es decir, ya ejecutamos una tool) responde con texto; si no, pide
         // create_task. Esto reproduce las dos vueltas del bucle real.
         LlmClient scriptedClient = request -> {
+            requestsSeen.add(request);
+
             boolean toolAlreadyRun = request.messages().stream()
-                    .anyMatch(message -> message instanceof ToolMessage);
+                    .anyMatch(ToolMessage.class::isInstance);
 
             if (toolAlreadyRun) {
                 return new LlmResponse(
@@ -65,7 +76,9 @@ class AgentServiceImplTest {
                 scriptedClient,
                 execution,
                 new ToolRegistry(List.of()),   // sin tools registradas: los specs no importan aquí
-                new ObjectMapper());
+                memory,
+                new ObjectMapper()
+        );
 
         AgentResponse response = agent.chat("Créame una tarea para comprar leche", null);
 
@@ -73,5 +86,68 @@ class AgentServiceImplTest {
         assertThat(executed).hasSize(1);
         assertThat(executed.get(0).name()).isEqualTo("create_task");
         assertThat(executed.get(0).arguments()).containsEntry("title", "Comprar leche");
+
+        // El historial cargado desde memoria debe viajar en la primera request al LLM.
+        assertThat(requestsSeen.get(0).messages()).contains(new UserMessage("Hola"));
+
+        // Solo se persiste el turno visible: el mensaje del usuario y la
+        // respuesta final, sin los pasos intermedios de tool-calling.
+        assertThat(memory.appendCalled).isTrue();
+        assertThat(memory.appendedMessages).containsExactly(
+                new UserMessage("Créame una tarea para comprar leche"),
+                new AssistantMessage("Tarea creada correctamente.", List.of()));
+    }
+
+    @Test
+    void no_persiste_el_turno_si_se_agota_MAX_STEPS() {
+        SpyConversationMemory memory = new SpyConversationMemory(List.of());
+
+        // Nunca resuelve: siempre vuelve a pedir la misma tool.
+        LlmClient neverEndingClient = request -> new LlmResponse(
+                new AssistantMessage(null, List.of(
+                        new ToolCall("call_x", "create_task", Map.of()))));
+
+        ToolExecutionService execution = (toolCall, user) ->
+                new ToolResult<>(Map.of(), "ok");
+
+        AgentServiceImpl agent = new AgentServiceImpl(
+                neverEndingClient,
+                execution,
+                new ToolRegistry(List.of()),
+                memory,
+                new ObjectMapper()
+        );
+
+        assertThatThrownBy(() -> agent.chat("cualquier cosa", null))
+                .isInstanceOf(AgentException.class);
+
+        assertThat(memory.appendCalled).isFalse();
+    }
+
+    /**
+     * Espía de {@link ConversationMemory}: devuelve un historial fijo y
+     * registra qué se le pidió persistir, para poder verificarlo en las
+     * aserciones sin depender de una base de datos real.
+     */
+    private static class SpyConversationMemory implements ConversationMemory {
+
+        private final List<Message> historyToReturn;
+        private boolean appendCalled = false;
+        private List<Message> appendedMessages;
+
+        SpyConversationMemory(List<Message> historyToReturn) {
+            this.historyToReturn = historyToReturn;
+        }
+
+        @Override
+        public List<Message> loadHistory(User user) {
+            return historyToReturn;
+        }
+
+        @Override
+        public void append(User user, List<Message> newMessages) {
+            appendCalled = true;
+            appendedMessages = newMessages;
+        }
     }
 }
