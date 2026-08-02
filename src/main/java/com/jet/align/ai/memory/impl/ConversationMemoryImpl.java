@@ -72,7 +72,8 @@ public class ConversationMemoryImpl implements ConversationMemory {
 
     private String writeMessages(List<Message> messages){
         try {
-            return objectMapper.writeValueAsString(messages);
+            return objectMapper.writerFor(new TypeReference<List<Message>>() {})
+                    .writeValueAsString(messages);
         } catch (Exception e) {
             throw new AgentException("Failed to serialize conversation history", e);
         }

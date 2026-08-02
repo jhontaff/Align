@@ -62,10 +62,6 @@ public class User extends BaseEntity implements  UserDetails {
     @OneToMany(mappedBy = "user")
     private List<Task> tasks = new ArrayList<>();
 
-    @OneToOne
-    @JoinColumn(name = "conversation_history_id", unique = true, nullable = false)
-    private ConversationHistory conversationHistory;
-
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of();
