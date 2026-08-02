@@ -5,6 +5,7 @@ import com.jet.align.task.enums.TaskStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 
 public record TaskResponse(
@@ -15,6 +16,7 @@ public record TaskResponse(
         TaskStatus status,
         Priority priority,
         LocalDate dueDate,
+        LocalTime dueTime,
         Instant createdAt,
         Instant updatedAt
 

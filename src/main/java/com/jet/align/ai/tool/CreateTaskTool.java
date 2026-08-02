@@ -45,6 +45,11 @@ public class CreateTaskTool implements Tool<TaskResponse> {
                   "type": "string",
                   "format": "date",
                   "description": "Optional due date in ISO-8601 format (YYYY-MM-DD)."
+                },
+                "dueTime": {
+                  "type": "string",
+                  "format": "time",
+                  "description": "Optional due time in HH:mm format (24-hour)."
                 }
               },
               "required": ["title", "priority"],

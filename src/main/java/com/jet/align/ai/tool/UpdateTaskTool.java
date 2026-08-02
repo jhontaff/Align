@@ -1,5 +1,6 @@
 package com.jet.align.ai.tool;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -54,13 +56,17 @@ public class UpdateTaskTool implements Tool<TaskResponse> {
                   "type": "string",
                   "format": "date",
                   "description": "Optional due date in ISO-8601 format (YYYY-MM-DD)."
+                },
+                 "dueTime": {
+                  "type": "string",
+                  "format": "time",
+                  "description": "Optional due time in HH:mm format (24-hour)."
                 }
               },
               "required": ["taskId"],
               "additionalProperties": false
             }
             """;
-
 
     @Override
     public String name() {
@@ -85,16 +91,27 @@ public class UpdateTaskTool implements Tool<TaskResponse> {
 
     }
 
+    // taskId viaja en el mismo Map<String, Object> pero se lee aparte, arriba en
+    // execute(); ignoreUnknown evita que convertValue() explote por ese campo
+    // extra que el patch no necesita.
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record TaskPatch(String title, String description, TaskStatus status,
+                             Priority priority, LocalDate dueDate, LocalTime dueTime) {}
+
     @Override
     public ToolResult<TaskResponse> execute(ToolContext context) {
         UUID taskId = UUID.fromString((String) context.arguments().get("taskId"));
         TaskResponse current = taskService.getTaskById(taskId, context.user());
+
+        TaskPatch taskPatch = objectMapper.convertValue(context.arguments(), TaskPatch.class);
+
         TaskUpdateRequest merged = new TaskUpdateRequest(
-                (String) context.arguments().getOrDefault("title", current.title()),
-                (String) context.arguments().getOrDefault("description", current.description()),
-                (TaskStatus) context.arguments().getOrDefault("status", current.status()),
-                (Priority) context.arguments().getOrDefault("priority", current.priority().name()),
-                (LocalDate) context.arguments().getOrDefault("dueDate", current.dueDate())
+                taskPatch.title() != null ? taskPatch.title() : current.title(),
+                taskPatch.description() != null ? taskPatch.description() : current.description(),
+                taskPatch.status() != null ? taskPatch.status() : current.status(),
+                taskPatch.priority() != null ? taskPatch.priority() : current.priority(),
+                taskPatch.dueDate() != null ? taskPatch.dueDate() : current.dueDate(),
+                taskPatch.dueTime() != null ? taskPatch.dueTime() : current.dueTime()
         );
         TaskResponse updated = taskService.updateTask(taskId, merged, context.user());
         return new ToolResult<>(updated, "Task updated successfully.");
