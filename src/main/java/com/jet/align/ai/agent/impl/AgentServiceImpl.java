@@ -5,6 +5,7 @@ import com.jet.align.ai.agent.AgentResponse;
 import com.jet.align.ai.agent.AgentService;
 import com.jet.align.ai.agent.execution.ToolExecutionService;
 import com.jet.align.ai.llm.*;
+import com.jet.align.ai.memory.ConversationMemory;
 import com.jet.align.ai.model.ToolCall;
 import com.jet.align.ai.prompt.SystemPromptBuilder;
 import com.jet.align.ai.tool.ToolRegistry;
@@ -37,14 +38,18 @@ public class AgentServiceImpl implements AgentService {
     private final LlmClient llmClient;
     private final ToolExecutionService toolExecutionService;
     private final ToolRegistry toolRegistry;
+    private final ConversationMemory conversationMemory;
     private final ObjectMapper objectMapper;
 
     @Override
     public AgentResponse chat(String userMessage, User user) {
 
         List<Message> messages = new ArrayList<>();
+        UserMessage userTurn = new UserMessage(userMessage);
+
         messages.add(new SystemMessage(SYSTEM_PROMPT));
-        messages.add(new UserMessage(userMessage));
+        messages.addAll(conversationMemory.loadHistory(user));
+        messages.add(userTurn);
 
         List<ToolSpecification> tools = buildSpecifications();
 
@@ -55,8 +60,10 @@ public class AgentServiceImpl implements AgentService {
             messages.add(assistant);
 
             if (!assistant.hasToolCalls()) {
+                conversationMemory.append(user, List.of(userTurn, assistant));
                 return new AgentResponse(assistant.content());
             }
+
 
             for (ToolCall call : assistant.toolCalls()) {
                 messages.add(runTool(call, user));

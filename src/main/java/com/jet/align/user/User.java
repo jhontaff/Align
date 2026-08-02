@@ -1,5 +1,6 @@
 package com.jet.align.user;
 
+import com.jet.align.ai.memory.ConversationHistory;
 import com.jet.align.common.model.BaseEntity;
 import com.jet.align.task.Task;
 import jakarta.persistence.*;
@@ -60,7 +61,6 @@ public class User extends BaseEntity implements  UserDetails {
 
     @OneToMany(mappedBy = "user")
     private List<Task> tasks = new ArrayList<>();
-
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
