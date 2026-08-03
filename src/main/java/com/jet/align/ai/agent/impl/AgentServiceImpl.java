@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,8 +34,6 @@ public class AgentServiceImpl implements AgentService {
      //Tope de vueltas del bucle
     private static final int MAX_STEPS = 8;
 
-    private static final String SYSTEM_PROMPT = SystemPromptBuilder.build();
-
     private final LlmClient llmClient;
     private final ToolExecutionService toolExecutionService;
     private final ToolRegistry toolRegistry;
@@ -44,10 +43,11 @@ public class AgentServiceImpl implements AgentService {
     @Override
     public AgentResponse chat(String userMessage, User user) {
 
+        String systemPrompt = SystemPromptBuilder.build(LocalDate.now());
         List<Message> messages = new ArrayList<>();
         UserMessage userTurn = new UserMessage(userMessage);
 
-        messages.add(new SystemMessage(SYSTEM_PROMPT));
+        messages.add(new SystemMessage(systemPrompt));
         messages.addAll(conversationMemory.loadHistory(user));
         messages.add(userTurn);
 

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 public record TaskRequest(
 
@@ -19,6 +20,7 @@ public record TaskRequest(
             @NotNull(message = "Priority is required.")
             Priority priority,
 
-            LocalDate dueDate
+            LocalDate dueDate,
+            LocalTime dueTime
 
 ) {}

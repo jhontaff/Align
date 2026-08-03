@@ -120,6 +120,19 @@ No domain receives special architectural treatment unless there is a compelling 
 
 ---
 
+# Finance domain (`finance`) — in progress
+
+Scaffolding exists; business logic does not yet. This is the current state, so a new session can tell what's done versus what's still an open decision:
+
+- Done: `Transaction` entity, `TransactionType` / `Category` enums, and migration `V6__add_transactions.sql`. `Category` owns its `TransactionType` (e.g. `FOOD(EXPENSE)`, `SALARY(INCOME)`) so type is derived from category instead of being a second field a caller could set inconsistently.
+- Defined but unimplemented: `TransactionService` declares the full contract (`createTransaction`, `getTransactionById`, `getTransactions(Pageable, TransactionFilter)`, `updateTransaction`, `deleteTransaction`, `getSummary`), but `TransactionServiceImpl` is a stub — every method returns `null` or does nothing.
+- Empty shells: `TransactionController` and `TransactionMapper` have no members yet. All DTOs (`TransactionRequest`, `TransactionUpdateRequest`, `TransactionResponse`, `TransactionFilter`, `FinancialSummaryResponse`) are empty records — fields haven't been decided.
+- Needs a look before building on it: `TransactionRepository` has two query methods that don't fit the pattern used elsewhere (`findByIdAndUserId` returns `Optional<List<Transaction>>` for what should be a single transaction by id, and `search` overlaps with it without a clear distinct purpose). Resolve this before writing `TransactionServiceImpl` against it.
+
+Next step, per [Preferred workflow](#preferred-workflow): **define contracts** — decide the DTO fields (what a transaction create/update/response/filter actually needs, what the financial summary aggregates) — before filling in `TransactionServiceImpl`. No AI tools (`create_transaction`, etc.) exist yet for this domain; add them only after the service layer is real, following the same pattern as the [Task AI tools](#task-ai-tools-aitool).
+
+---
+
 # AI architecture
 
 The AI layer orchestrates business capabilities.
@@ -138,6 +151,20 @@ The implementation should always respect this separation.
 New AI capabilities should normally be implemented as new `Tool` implementations instead of adding logic to `AgentService`.
 
 The architecture diagram in `graphify-out/graph.html` reflects the current implementation. The principles defined in this document take precedence over the diagram.
+
+## Tool argument parsing (`ai.tool`)
+
+A tool's raw arguments (`ToolContext.arguments()`) are a `Map<String, Object>` deserialized from the LLM's JSON tool call — every value arrives as `String`/`null` (or a nested `Map`/`List`), never as an already-typed enum or date. Never cast these values directly (`(Priority) arguments.get(...)`); it throws `ClassCastException`. Convert through Jackson instead, following the shape the tool actually needs:
+
+- **Full-replace tools** (e.g. `CreateTaskTool`) convert straight to the DTO the domain service expects: `objectMapper.convertValue(arguments, TaskRequest.class)`.
+- **Partial-update tools** (e.g. `UpdateTaskTool`) convert to a private, all-nullable "patch" record scoped to the tool, annotated `@JsonIgnoreProperties(ignoreUnknown = true)` (fields read separately before the conversion, like the resource id, are otherwise-unknown properties to the patch type and would fail deserialization without it), then merge each field against the current state to build the full DTO the service expects.
+- **Query/filter tools** (e.g. `ListTasksTool`) that only take a single simple field don't need either pattern above — an explicit conversion on that one field (`TaskStatus.valueOf(...)`) is enough. Reach for the patch-record pattern only once there's real merge logic to justify it.
+
+## Task AI tools (`ai.tool`)
+
+Current coverage: `create_task`, `update_task`, `list_tasks`. `delete_task` is intentionally not implemented yet — deferred for this MVP, not an oversight; add it once there's a real need to delete tasks through chat.
+
+`list_tasks` uses a fixed `Pageable` internally (size 20, sorted by `createdAt` DESC — same default as `TaskController.getTasks`), not exposed in its JSON schema. A chat request like "mostrame mis tareas pendientes" rarely needs explicit page/size control; add pagination parameters to the schema only if a real need to browse past the first page over chat shows up. It returns `List<TaskResponse>` (`Page#getContent()`), not the raw `Page`, so the LLM isn't handed pagination metadata (`pageable`, `totalElements`, etc.) it has no use for.
 
 ## Conversation memory (`ai.memory`)
 
