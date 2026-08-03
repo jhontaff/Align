@@ -25,10 +25,10 @@ public class Task extends BaseEntity {
     private UUID id;
 
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false, length = 1000)
+    @Column(nullable = false)
     private String description;
 
     @Enumerated(EnumType.STRING)
