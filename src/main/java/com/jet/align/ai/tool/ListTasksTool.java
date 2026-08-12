@@ -50,7 +50,7 @@ public class ListTasksTool implements Tool<List<TaskResponse>> {
     @Override
     public Map<String, Object> parameters() {
         try {
-            return objectMapper.readValue(PARAMETERS_SCHEMA, new TypeReference<Map<String, Object>>() {});
+            return objectMapper.readValue(PARAMETERS_SCHEMA, new TypeReference<>() {});
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Invalid JSON Schema for tool " + name(), e);
         }
