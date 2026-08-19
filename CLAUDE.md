@@ -188,7 +188,7 @@ Current coverage: `create_transaction`, `list_transactions`, `get_financial_summ
 
 `create_transaction`'s schema deliberately has no `type` property: `TransactionRequest` doesn't declare that field (`category` implies it). Advertising one the DTO doesn't have would make `execute()` throw `UnrecognizedPropertyException` the moment the LLM populated it, since the app's `ObjectMapper` fails on unknown properties by default — same reason `UpdateTaskTool`'s patch record needs `@JsonIgnoreProperties(ignoreUnknown = true)`. `CreateTransactionToolTest` guards this schema contract directly, so it can't regress silently.
 
-Known gap: `SystemPromptBuilder`'s system prompt text still only mentions task management ("Ayudas al usuario a gestionar sus tareas"), not Finance. This doesn't block the Finance tools from being callable — the LLM receives tool specifications separately from the prompt text — but it's a stale description that undersells the agent's real capabilities. Worth fixing before adding a fourth domain's worth of tools on top.
+Done: `SystemPromptBuilder`'s system prompt text now mentions both tasks and finance ("Ayudas al usuario a gestionar sus tareas y sus finanzas personales"), no longer stale now that Finance tools exist. Update it again the next time a domain's tools go live, so the prompt never drifts behind the real tool surface.
 
 ## Conversation memory (`ai.memory`)
 
