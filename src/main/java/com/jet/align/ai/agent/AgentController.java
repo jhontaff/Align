@@ -1,12 +1,11 @@
 package com.jet.align.ai.agent;
 
+import com.jet.align.ai.agent.dto.AgentResponse;
+import com.jet.align.ai.agent.dto.ChatHistoryResponse;
 import com.jet.align.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * Punto de entrada del producto: el usuario conversa con el agente.
@@ -28,6 +27,12 @@ public class AgentController {
     ) {
         return agentService.chat(request.message(), user);
     }
+
+    @GetMapping("/history")
+    public ChatHistoryResponse getHistory(@AuthenticationPrincipal User user) {
+        return agentService.getHistory(user);
+    }
+
 
     public record ChatMessage(String message) {
     }

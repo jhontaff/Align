@@ -1,6 +1,9 @@
 package com.jet.align.ai.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jet.align.ai.agent.dto.AgentResponse;
+import com.jet.align.ai.agent.dto.ChatHistoryResponse;
+import com.jet.align.ai.agent.dto.ChatTurn;
 import com.jet.align.ai.agent.execution.ToolExecutionService;
 import com.jet.align.ai.agent.impl.AgentServiceImpl;
 import com.jet.align.ai.llm.*;
@@ -122,6 +125,48 @@ class AgentServiceImplTest {
                 .isInstanceOf(AgentException.class);
 
         assertThat(memory.appendCalled).isFalse();
+    }
+
+    @Test
+    void getHistory_mapea_los_turnos_persistidos_a_ChatTurn() {
+        SpyConversationMemory memory = new SpyConversationMemory(List.of(
+                new UserMessage("Hola"),
+                new AssistantMessage("Hola, ¿en qué ayudo?", List.of())));
+
+        // LLM y tools no deberían tocarse para leer historial: si getHistory
+        // los llamara, el test explota en vez de fallar en silencio.
+        AgentServiceImpl agent = new AgentServiceImpl(
+                request -> { throw new UnsupportedOperationException("getHistory no debería llamar al LLM"); },
+                (toolCall, user) -> { throw new UnsupportedOperationException("getHistory no debería ejecutar tools"); },
+                new ToolRegistry(List.of()),
+                memory,
+                new ObjectMapper()
+        );
+
+        ChatHistoryResponse response = agent.getHistory(null);
+
+        assertThat(response.turns()).containsExactly(
+                new ChatTurn("user", "Hola"),
+                new ChatTurn("assistant", "Hola, ¿en qué ayudo?"));
+    }
+
+    @Test
+    void getHistory_lanza_si_el_historial_persistido_trae_un_tipo_inesperado() {
+        // No debería pasar nunca: chat() solo persiste UserMessage/AssistantMessage.
+        // Si aparece, preferimos romper fuerte antes que ocultarlo.
+        SpyConversationMemory memory = new SpyConversationMemory(List.of(
+                new ToolMessage("call_1", "{}")));
+
+        AgentServiceImpl agent = new AgentServiceImpl(
+                request -> { throw new UnsupportedOperationException(); },
+                (toolCall, user) -> { throw new UnsupportedOperationException(); },
+                new ToolRegistry(List.of()),
+                memory,
+                new ObjectMapper()
+        );
+
+        assertThatThrownBy(() -> agent.getHistory(null))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     /**
