@@ -1,4 +1,6 @@
-package com.jet.align.ai.agent;
+package com.jet.align.ai.agent.dto;
+
+import com.jet.align.ai.agent.AgentService;
 
 /**
  * La respuesta final del agente al usuario, tras completar el bucle.

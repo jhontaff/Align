@@ -1,8 +1,10 @@
 package com.jet.align.ai.agent.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jet.align.ai.agent.AgentResponse;
 import com.jet.align.ai.agent.AgentService;
+import com.jet.align.ai.agent.dto.AgentResponse;
+import com.jet.align.ai.agent.dto.ChatHistoryResponse;
+import com.jet.align.ai.agent.dto.ChatTurn;
 import com.jet.align.ai.agent.execution.ToolExecutionService;
 import com.jet.align.ai.llm.*;
 import com.jet.align.ai.memory.ConversationMemory;
@@ -72,6 +74,25 @@ public class AgentServiceImpl implements AgentService {
 
         throw new AgentException(
                 "El agente superó el máximo de pasos (" + MAX_STEPS + ").");
+    }
+
+    @Override
+    public ChatHistoryResponse getHistory(User user) {
+        List<ChatTurn> turns = conversationMemory.loadHistory(user).stream()
+                .map(this::toChatTurn)
+                .toList();
+        return new ChatHistoryResponse(turns);
+    }
+
+    private ChatTurn toChatTurn(Message message) {
+        return switch (message) {
+            case UserMessage(String content) -> new ChatTurn("user", content);
+            case AssistantMessage assistant -> new ChatTurn("assistant", assistant.content());
+            case SystemMessage ignored -> throw new IllegalStateException(
+                    "SystemMessage no debería estar persistido en el historial.");
+            case ToolMessage ignored -> throw new IllegalStateException(
+                    "ToolMessage no debería estar persistido en el historial.");
+        };
     }
 
 
