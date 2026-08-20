@@ -9,8 +9,9 @@ public interface HabitMapper {
 
     Habit toEntity(HabitRequest request);
 
-    @Mapping(target = "currentStreak", source = "streak")
-    HabitResponse toResponse(Habit habit, int streak);
+    @Mapping(target = "currentStreak", source = "currentStreak")
+    @Mapping(target = "longestStreak", source = "longestStreak")
+    HabitResponse toResponse(Habit habit, int currentStreak, int longestStreak);
 
     void updateEntity(HabitRequest request, @MappingTarget Habit habit);
 }
