@@ -11,7 +11,6 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "tasks")
@@ -19,11 +18,6 @@ import java.util.UUID;
 @Setter
 @NoArgsConstructor
 public class Task extends BaseEntity {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
 
     @Column(nullable = false)
     private String title;
