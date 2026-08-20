@@ -12,4 +12,5 @@ public interface HabitService {
     HabitResponse updateHabit(User user, UUID habitId, HabitRequest habitRequest);
     void deleteHabit(User user, UUID habitId);
     HabitResponse completeHabit(User user, UUID habitId);
+    HabitResponse getHabitById(User user, UUID habitId);
 }
