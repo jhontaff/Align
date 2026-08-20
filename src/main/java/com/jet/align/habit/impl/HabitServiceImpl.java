@@ -142,6 +142,4 @@ public class HabitServiceImpl implements HabitService {
         return longest;
     }
 
-
-
 }
