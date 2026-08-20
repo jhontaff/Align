@@ -7,6 +7,7 @@ public record HabitResponse(
         UUID id,
         String name,
         int currentStreak,
+        int longestStreak,
         Instant createdAt,
         Instant updatedAt
 ) {}

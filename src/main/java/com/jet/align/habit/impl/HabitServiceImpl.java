@@ -35,7 +35,7 @@ public class HabitServiceImpl implements HabitService {
     public HabitResponse createHabit(User user, HabitRequest habitRequest) {
         Habit habit  = mapper.toEntity(habitRequest);
         habit.setUser(user);
-        return mapper.toResponse(habitRepository.save(habit), 0);
+        return mapper.toResponse(habitRepository.save(habit), 0, 0);
     }
 
     @Override
@@ -45,8 +45,9 @@ public class HabitServiceImpl implements HabitService {
         return habits.stream()
                 .map(habit -> {
                     List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
-                    int streak = calculateStreak(completions);
-                    return mapper.toResponse(habit, streak);
+                    int currentStreak = calculateStreak(completions);
+                    int longestStreak = calculateLongestStreak(completions);
+                    return mapper.toResponse(habit, currentStreak, longestStreak);
                 })
                 .toList();
     }
@@ -57,11 +58,12 @@ public class HabitServiceImpl implements HabitService {
         Habit habit = habitRepository.findByIdAndUser(habitId, user)
                 .orElseThrow(() -> new ResourceNotFoundException(HABIT_NOT_FOUND_MESSAGE + habitId));
         mapper.updateEntity(habitRequest, habit);
-        return
-                mapper.toResponse(
-                        habitRepository.save(habit),
-                        calculateStreak(
-                                habitCompletionRepository.findByHabitOrderByDateDesc(habit)));
+
+        List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
+        int currentStreak = calculateStreak(completions);
+        int longestStreak = calculateLongestStreak(completions);
+        return mapper.toResponse(habit, currentStreak, longestStreak);
+
     }
 
     @Override
@@ -70,8 +72,11 @@ public class HabitServiceImpl implements HabitService {
         Habit habit = habitRepository.findByIdAndUser(habitId, user)
                 .orElseThrow(() -> new ResourceNotFoundException(HABIT_NOT_FOUND_MESSAGE + habitId));
 
-        int streak = calculateStreak(habitCompletionRepository.findByHabitOrderByDateDesc(habit));
-        return mapper.toResponse(habit, streak);
+        List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
+        int currentStreak = calculateStreak(completions);
+        int longestStreak = calculateLongestStreak(completions);
+        return mapper.toResponse(habit, currentStreak, longestStreak);
+
     }
 
 
@@ -98,9 +103,10 @@ public class HabitServiceImpl implements HabitService {
         }
 
         List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
-        int streak = calculateStreak(completions);
+        int currentStreak = calculateStreak(completions);
+        int longestStreak = calculateLongestStreak(completions);
 
-        return mapper.toResponse(habit, streak);
+        return mapper.toResponse(habit, currentStreak, longestStreak);
     }
 
     private int calculateStreak(List<HabitCompletion> completions) {
@@ -120,5 +126,20 @@ public class HabitServiceImpl implements HabitService {
         return streak;
     }
 
+    private int calculateLongestStreak(List<HabitCompletion> completions) {
+        if (completions.isEmpty()) return 0;
+        int longest = 1;
+        int current = 1;
+        for (int i = 1; i < completions.size(); i++) {
+            LocalDate previous = completions.get(i - 1).getDate();
+            if (completions.get(i).getDate().equals(previous.minusDays(1))) {
+                current++;
+            } else {
+                current = 1;
+            }
+            longest = Math.max(longest, current);
+        }
+        return longest;
+    }
 
 }

@@ -10,14 +10,11 @@ public class SystemPromptBuilder {
 
     public static String build(LocalDate today) {
         return """
-            Eres el asistente personal "Align". Ayudas al usuario a gestionar
-            sus tareas y sus finanzas personales. Cuando el usuario pida algo
-            que una herramienta pueda resolver, llama a la herramienta
-            adecuada con argumentos válidos. Responde de forma breve y clara.
-
-            Hoy es %s. Usa esta fecha como referencia para resolver expresiones
-            relativas como "hoy", "mañana" o "en una semana".
-            """.formatted(today);
+                Eres el asistente personal "Align". Ayudas al usuario con su vida
+                personal usando las herramientas disponibles. Responde breve y claro.
+                Hoy es %s. Usalo para resolver fechas relativas ("hoy", "mañana",
+                "en una semana").
+                """.formatted(today);
     }
 
 }
