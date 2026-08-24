@@ -8,6 +8,7 @@ import com.jet.align.ai.agent.execution.ToolExecutionService;
 import com.jet.align.ai.agent.impl.AgentServiceImpl;
 import com.jet.align.ai.llm.*;
 import com.jet.align.ai.memory.ConversationMemory;
+import com.jet.align.ai.memory.UserMemoryService;
 import com.jet.align.ai.model.ToolCall;
 import com.jet.align.ai.tool.ToolRegistry;
 import com.jet.align.ai.tool.ToolResult;
@@ -21,6 +22,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class AgentServiceImplTest {
 
@@ -80,7 +82,9 @@ class AgentServiceImplTest {
                 execution,
                 new ToolRegistry(List.of()),   // sin tools registradas: los specs no importan aquí
                 memory,
-                new ObjectMapper()
+                mock(UserMemoryService.class),
+                new ObjectMapper(),
+                "UTC"
         );
 
         AgentResponse response = agent.chat("Créame una tarea para comprar leche", null);
@@ -118,7 +122,9 @@ class AgentServiceImplTest {
                 execution,
                 new ToolRegistry(List.of()),
                 memory,
-                new ObjectMapper()
+                mock(UserMemoryService.class),
+                new ObjectMapper(),
+                "UTC"
         );
 
         assertThatThrownBy(() -> agent.chat("cualquier cosa", null))
@@ -140,7 +146,9 @@ class AgentServiceImplTest {
                 (toolCall, user) -> { throw new UnsupportedOperationException("getHistory no debería ejecutar tools"); },
                 new ToolRegistry(List.of()),
                 memory,
-                new ObjectMapper()
+                mock(UserMemoryService.class),
+                new ObjectMapper(),
+                "UTC"
         );
 
         ChatHistoryResponse response = agent.getHistory(null);
@@ -162,7 +170,9 @@ class AgentServiceImplTest {
                 (toolCall, user) -> { throw new UnsupportedOperationException(); },
                 new ToolRegistry(List.of()),
                 memory,
-                new ObjectMapper()
+                mock(UserMemoryService.class),
+                new ObjectMapper(),
+                "UTC"
         );
 
         assertThatThrownBy(() -> agent.getHistory(null))
