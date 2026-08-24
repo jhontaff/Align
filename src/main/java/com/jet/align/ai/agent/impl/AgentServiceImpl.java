@@ -8,8 +8,11 @@ import com.jet.align.ai.agent.dto.ChatTurn;
 import com.jet.align.ai.agent.execution.ToolExecutionService;
 import com.jet.align.ai.llm.*;
 import com.jet.align.ai.memory.ConversationMemory;
+import com.jet.align.ai.memory.UserMemoryService;
+import com.jet.align.ai.memory.dto.MemoryResponse;
 import com.jet.align.ai.model.ToolCall;
 import com.jet.align.ai.prompt.SystemPromptBuilder;
+import com.jet.align.ai.prompt.UserContext;
 import com.jet.align.ai.tool.ToolRegistry;
 import com.jet.align.ai.tool.ToolResult;
 import com.jet.align.common.exception.AgentException;
@@ -19,9 +22,11 @@ import com.jet.align.user.User;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -40,12 +45,35 @@ public class AgentServiceImpl implements AgentService {
     private final ToolExecutionService toolExecutionService;
     private final ToolRegistry toolRegistry;
     private final ConversationMemory conversationMemory;
+    private final UserMemoryService userMemoryService;
     private final ObjectMapper objectMapper;
+    private final ZoneId timezone;
+
+    public AgentServiceImpl(LlmClient llmClient,
+                            ToolExecutionService toolExecutionService,
+                            ToolRegistry toolRegistry,
+                            ConversationMemory conversationMemory,
+                            UserMemoryService userMemoryService,
+                            ObjectMapper objectMapper,
+                            @Value("${align.timezone}") String timezone) {
+        this.llmClient = llmClient;
+        this.toolExecutionService = toolExecutionService;
+        this.toolRegistry = toolRegistry;
+        this.conversationMemory = conversationMemory;
+        this.userMemoryService = userMemoryService;
+        this.objectMapper = objectMapper;
+        this.timezone = ZoneId.of(timezone);
+    }
 
     @Override
     public AgentResponse chat(String userMessage, User user) {
 
-        String systemPrompt = SystemPromptBuilder.build(LocalDate.now());
+        LocalDate today = LocalDate.now(timezone);
+        List<String> memories = userMemoryService.list(user).stream()
+                .map(MemoryResponse::content)
+                .toList();
+        String systemPrompt = SystemPromptBuilder.build(new UserContext(today, memories));
+
         List<Message> messages = new ArrayList<>();
         UserMessage userTurn = new UserMessage(userMessage);
 
