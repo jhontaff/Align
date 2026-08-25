@@ -133,6 +133,27 @@ Domain roadmap decided while designing Habit: **Project is next** — it will be
 
 ---
 
+# Auth (`auth`) — JWT expiration handling fixed
+
+Not part of the Personal assistant roadmap phases — a hardening pass on existing MVP infrastructure, done as a detour between Phase 3 and Phase 4 after a direct question about what happens when a JWT expires.
+
+Problem found (not hypothetical, traced through the actual code): `JwtService.extractAllClaims` parses the token via `Jwts.parser()...parseSignedClaims(token)`, and JJWT validates expiration **during parsing** — an expired token makes `parseSignedClaims` throw `ExpiredJwtException` before `JwtService.isTokenExpired` is ever reached (that method was effectively dead code for this case). `JwtAuthenticationFilter` didn't catch this. Since servlet filters run before `DispatcherServlet`, the exception never reached `GlobalExceptionHandler` (which only sees exceptions thrown inside controllers) — it propagated as an uncaught exception, and the client got a generic Spring Boot `500`, not a `401`. A second, unrelated fragility in the same method: `filterChain.doFilter(...)` was only called *inside* the `if (email != null && ...)` block, so any path that didn't enter that block would drop the request with no response at all — dormant today (tokens always carry a subject), but fixed while already in the method.
+
+Decisions made:
+
+- **Every authentication failure — missing token, expired token, invalid signature, malformed token — collapses to the same `401` with the same `ApiResponse` shape.** No message differentiates *why* auth failed. There's no refresh-token flow, so the only sane frontend reaction to any of these is identical (clear the stored token, redirect to login) — distinguishing them in the response would be complexity with no consumer.
+- **No refresh token was introduced.** `jwt.expiration=24h` plus "your session expired, log in again" is proportional UX for a single-user personal project; a refresh token earns its complexity only if 24h logouts become real daily friction, not preemptively.
+- **The fix keeps a single response path for all "not authenticated" outcomes**, rather than having the filter short-circuit invalid/expired tokens with its own response. `JwtAuthenticationFilter` now catches `JwtException` around the parse/validate block, does *not* set the `SecurityContext`, and always falls through to `filterChain.doFilter(...)` — exactly the same path a missing token already took. That un-authenticated request then gets rejected further down by Spring Security's own authorization check, which invokes the new `JwtAuthenticationEntryPoint`. Caught during review: an earlier version of this fix called `response.sendError(...)` directly from the filter's catch block and returned early — technically also a `401`, but bypassing `JwtAuthenticationEntryPoint` entirely, which meant expired/invalid tokens produced Spring Boot's generic default error JSON while a missing token produced the project's `ApiResponse` shape. Two different bodies for what should be one outcome — fixed by removing the early return so both cases converge on the same entry point.
+
+Implemented:
+
+- Done: `JwtAuthenticationEntryPoint` (`auth`) — implements `AuthenticationEntryPoint`, writes `ApiResponse.error(HttpStatus.UNAUTHORIZED, "Authentication required.")` directly to the response, same JSON shape as every other error path in the app. Wired into `SecurityConfig` via `.exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))`.
+- Done: `JwtAuthenticationFilter` — parse/validate wrapped in `try/catch (JwtException e)`, catch block intentionally empty (falls through), `filterChain.doFilter(...)` moved to always run exactly once regardless of outcome.
+
+Frontend contract (not this repo, but the behavior this backend now guarantees): any `401` response means the token is no longer usable, for any reason — clear it and redirect to login. No response-body inspection needed beyond the status code.
+
+---
+
 # Finance domain (`finance`) — complete (REST + AI tools)
 
 Entity, DTOs, repository, mapper, service, controller, and AI tools are all implemented and tested — the same level of completeness as Task. This is the current state, so a new session can tell what's done versus what's still open:
