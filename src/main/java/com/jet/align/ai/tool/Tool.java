@@ -11,4 +11,7 @@ public interface Tool<T> {
     Map<String, Object> parameters();
 
     ToolResult<T> execute(ToolContext context);
+
+    RiskLevel risk();
+
 }

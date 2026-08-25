@@ -58,4 +58,9 @@ public class CompleteHabitTool implements Tool<HabitResponse> {
         return new ToolResult<>(response, "Habit marked as complete.");
     }
 
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
+    }
+
 }

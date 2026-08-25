@@ -61,4 +61,9 @@ public class ForgetFactTool implements Tool<Void> {
         }
     }
 
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.DESTRUCTIVE;
+    }
+
 }

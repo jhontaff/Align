@@ -64,4 +64,9 @@ public class ListTasksTool implements Tool<List<TaskResponse>> {
         List<TaskResponse> tasks = taskService.getTasks(context.user(),pageable, status).getContent();
         return new ToolResult<>(tasks, "Tasks retrieved successfully");
     }
+
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
+    }
 }

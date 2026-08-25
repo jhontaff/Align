@@ -52,4 +52,9 @@ public class ListHabitsTool implements Tool<List<HabitResponse>> {
         return new ToolResult<>(habits, "Habits retrieved successfully.");
     }
 
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
+    }
+
 }

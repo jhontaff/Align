@@ -62,4 +62,9 @@ public class RememberFactTool implements Tool<MemoryResponse>{
         return new ToolResult<>(response, "Memory saved successfully.");
     }
 
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
+    }
+
 }

@@ -86,4 +86,10 @@ public class CreateTransactionTool implements  Tool<TransactionResponse> {
                 "Transaction created successfully."
         );
     }
+
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
+    }
+
 }
