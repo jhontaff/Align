@@ -52,12 +52,16 @@ public class CreateHabitTool implements Tool<HabitResponse> {
         }
     }
 
-
     @Override
     public ToolResult<HabitResponse> execute(ToolContext context) {
         HabitRequest request = objectMapper.convertValue(context.arguments(), HabitRequest.class);
         HabitResponse response = habitService.createHabit(context.user(), request);
         return new ToolResult<>(response, "Habit created successfully.");
 
+    }
+
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
     }
 }

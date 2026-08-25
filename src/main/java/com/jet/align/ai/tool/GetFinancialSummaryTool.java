@@ -77,4 +77,10 @@ public class GetFinancialSummaryTool implements Tool<FinancialSummaryResponse> {
                 context.user(), filter);
         return new ToolResult<>(response, "Financial summary retrieved successfully.");
     }
+
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
+    }
+
 }

@@ -83,7 +83,7 @@ public class UpdateTaskTool implements Tool<TaskResponse> {
         try {
             return objectMapper.readValue(
                     PARAMETERS_SCHEMA,
-                    new TypeReference<Map<String, Object>>() {}
+                    new TypeReference<>() {}
             );
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to parse parameters schema", e);
@@ -91,7 +91,7 @@ public class UpdateTaskTool implements Tool<TaskResponse> {
 
     }
 
-    // taskId viaja en el mismo Map<String, Object> pero se lee aparte, arriba en
+    // taskId viaja en el mismo Map<String, Object>, pero se lee aparte, arriba en
     // execute(); ignoreUnknown evita que convertValue() explote por ese campo
     // extra que el patch no necesita.
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -115,5 +115,10 @@ public class UpdateTaskTool implements Tool<TaskResponse> {
         );
         TaskResponse updated = taskService.updateTask(taskId, merged, context.user());
         return new ToolResult<>(updated, "Task updated successfully.");
+    }
+
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.DESTRUCTIVE;
     }
 }

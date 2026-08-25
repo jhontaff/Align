@@ -97,6 +97,9 @@ public class CreateTaskTool implements Tool<TaskResponse> {
 
     }
 
-
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
+    }
 
 }

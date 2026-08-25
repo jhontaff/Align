@@ -53,4 +53,9 @@ public class ListMemoriesTool implements  Tool<List<MemoryResponse>>
         List<MemoryResponse> memories = userMemoryService.list(context.user());
         return new ToolResult<>(memories, "Memories retrieved successfully.");
     }
+
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
+    }
 }

@@ -91,7 +91,10 @@ public class ListTransactionsTool implements  Tool<List<TransactionResponse>> {
         ).getContent();
 
         return new ToolResult<>(transactions, "Transactions retrieved successfully");
+    }
 
-
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.SAFE;
     }
 }

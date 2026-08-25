@@ -66,4 +66,10 @@ public class UpdateMemoryTool implements Tool<MemoryResponse>{
         MemoryResponse response = userMemoryService.update(context.user(), memoryId, content);
         return new ToolResult<>(response, "Memory updated successfully.");
     }
+
+    @Override
+    public RiskLevel risk() {
+        return RiskLevel.DESTRUCTIVE;
+    }
+
 }
