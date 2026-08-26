@@ -35,7 +35,7 @@ class TaskServiceImplTest {
 
     private final TaskRepository repository = mock(TaskRepository.class);
     private final TaskMapper mapper = mock(TaskMapper.class);
-    private final TaskServiceImpl service = new TaskServiceImpl(repository, mapper);
+    private final TaskServiceImpl service = new TaskServiceImpl(repository, mapper, "UTC");
     private final User user = new User();
 
     private TaskResponse sampleResponse(UUID id, TaskStatus status) {
@@ -168,5 +168,16 @@ class TaskServiceImplTest {
         assertThatThrownBy(() -> service.deleteTask(id, user))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(repository, never()).delete(any(Task.class));
+    }
+
+    @Test
+    void findTasksDueToday_delega_en_el_repository_con_la_fecha_de_hoy_y_excluye_completadas() {
+        Task task = new Task();
+        LocalDate today = LocalDate.now();
+        when(repository.findAllByDueDateAndStatusNot(today, TaskStatus.COMPLETED)).thenReturn(List.of(task));
+
+        List<Task> dueToday = service.findTasksDueToday();
+
+        assertThat(dueToday).containsExactly(task);
     }
 }

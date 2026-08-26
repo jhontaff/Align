@@ -10,11 +10,15 @@ import com.jet.align.task.dto.TaskResponse;
 import com.jet.align.task.dto.TaskUpdateRequest;
 import com.jet.align.task.enums.TaskStatus;
 import com.jet.align.user.User;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -24,10 +28,13 @@ public class TaskServiceImpl implements TaskService {
     
     private final TaskRepository repository;
     private final TaskMapper mapper;
+    private final ZoneId timezone;
 
-    public TaskServiceImpl(TaskRepository repository, TaskMapper mapper) {
+    public TaskServiceImpl(TaskRepository repository, TaskMapper mapper,
+                           @Value("${align.timezone}") String timezone) {
         this.repository = repository;
         this.mapper = mapper;
+        this.timezone = ZoneId.of(timezone);
     }
 
     @Transactional
@@ -88,6 +95,12 @@ public class TaskServiceImpl implements TaskService {
                                 TASK_NOT_FOUND_MESSAGE + id));
 
         repository.delete(task);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Task> findTasksDueToday() {
+        return repository.findAllByDueDateAndStatusNot(LocalDate.now(timezone), TaskStatus.COMPLETED);
     }
 
 }

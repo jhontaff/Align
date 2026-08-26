@@ -1,11 +1,7 @@
 package com.jet.align.habit.impl;
 
 import com.jet.align.common.exception.ResourceNotFoundException;
-import com.jet.align.habit.Habit;
-import com.jet.align.habit.HabitCompletion;
-import com.jet.align.habit.HabitCompletionRepository;
-import com.jet.align.habit.HabitMapper;
-import com.jet.align.habit.HabitRepository;
+import com.jet.align.habit.*;
 import com.jet.align.habit.dto.HabitRequest;
 import com.jet.align.habit.dto.HabitResponse;
 import com.jet.align.user.User;
@@ -21,17 +17,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class HabitServiceImplTest {
 
     private final HabitRepository habitRepository = mock(HabitRepository.class);
     private final HabitCompletionRepository habitCompletionRepository = mock(HabitCompletionRepository.class);
     private final HabitMapper mapper = mock(HabitMapper.class);
-    private final HabitServiceImpl service = new HabitServiceImpl(habitRepository, mapper, habitCompletionRepository);
+    private final HabitServiceImpl service = new HabitServiceImpl(habitRepository, mapper, habitCompletionRepository, "UTC");
     private final User user = new User();
 
     private HabitResponse sampleResponse(UUID id, int currentStreak, int longestStreak) {
@@ -301,5 +294,53 @@ class HabitServiceImplTest {
 
         assertThat(response.currentStreak()).isEqualTo(2);
         assertThat(response.longestStreak()).isEqualTo(4);
+    }
+
+    @Test
+    void findHabitsAtRisk_incluye_habitos_no_completados_hoy_con_racha_activa() {
+        Habit habit = new Habit();
+        LocalDate today = LocalDate.now();
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
+                completionOn(today.minusDays(1)), completionOn(today.minusDays(2))));
+
+        List<Habit> atRisk = service.findHabitsAtRisk();
+
+        assertThat(atRisk).containsExactly(habit);
+    }
+
+    @Test
+    void findHabitsAtRisk_excluye_habitos_ya_completados_hoy() {
+        Habit habit = new Habit();
+        LocalDate today = LocalDate.now();
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
+                completionOn(today), completionOn(today.minusDays(1))));
+
+        List<Habit> atRisk = service.findHabitsAtRisk();
+
+        assertThat(atRisk).isEmpty();
+    }
+
+    @Test
+    void findHabitsAtRisk_excluye_habitos_sin_racha_activa() {
+        Habit habit = new Habit();
+        LocalDate today = LocalDate.now();
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
+                completionOn(today.minusDays(5))));
+
+        List<Habit> atRisk = service.findHabitsAtRisk();
+
+        assertThat(atRisk).isEmpty();
+    }
+
+    @Test
+    void findHabitsAtRisk_devuelve_vacio_si_no_hay_habitos() {
+        when(habitRepository.findAll()).thenReturn(List.of());
+
+        List<Habit> atRisk = service.findHabitsAtRisk();
+
+        assertThat(atRisk).isEmpty();
     }
 }
