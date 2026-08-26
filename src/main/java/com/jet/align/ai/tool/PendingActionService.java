@@ -10,5 +10,5 @@ public interface PendingActionService {
     ToolResult<?> confirm(User user, UUID id);
     PendingAction create(User user, String toolName, Map<String, Object> arguments);
     void reject(User user, UUID id);
-
+    void expireStale();
 }
