@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 public class TaskDueReminderJob {
     private final TaskService taskService;
     private final NotificationService notificationService;
-    @Scheduled(cron = "0 0 20 * * *", zone = "${align.timezone}")
+    @Scheduled(cron = "0 0 18 * * *", zone = "${align.timezone}")
     public void run() {
         for (Task task : taskService.findTasksDueToday()) {
             notificationService.notify(task.getUser(), "Tarea vence hoy",

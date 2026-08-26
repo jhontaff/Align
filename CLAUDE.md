@@ -199,7 +199,7 @@ Decided 2026-08-24: Align stops adding new business domains for now (the Project
 3. **Authorization & confirmation** — complete, see below.
 4. **Multi-step planning & execution** — paused, see below.
 5. **Scheduler & events** — first case implemented, see below.
-6. **Proactivity & notifications** — move from a purely reactive assistant to one that can detect situations worth surfacing and tell the user, unprompted.
+6. **Proactivity & notifications** — move from a purely reactive assistant to one that can detect situations worth surfacing and tell the user, unprompted. First cases implemented, see below.
 7. **External integrations** (calendar, email, weather, ...) — kept decoupled from the agent itself, with provider-specific details encapsulated the same way `ai.llm.<provider>` already isolates Gemini.
 8. **Voice** — treated as one more interface to the assistant, not a core architectural concern.
 9. **NFC / physical triggers** — explored as a way to activate existing contexts or actions, not as a new domain.
@@ -313,8 +313,37 @@ Implemented:
 
 Known gaps, deliberate for this first cut:
 
-- No other domain plugs into the scheduler yet (Task due-date reminders, Habit daily reminders) — deferred until Phase 6 (Proactivity & notifications) exists, since detecting a situation without a channel to surface it has no payoff yet.
+- ~~No other domain plugs into the scheduler yet~~ — resolved by Phase 6: `HabitAtRiskJob` and `TaskDueReminderJob` now plug into `scheduler`, see below.
 - No catch-up/backfill if the app is down when a scheduled run would have fired — `@Scheduled(fixedRate = ...)` just skips missed runs. Acceptable for housekeeping with a 24h TTL and hourly sweeps; revisit only if a future scheduled job needs a stronger guarantee.
+
+---
+
+## Phase 6 — Proactivity & notifications (first cases implemented)
+
+Problem framing agreed: this phase is the payoff Phase 5 was built for — "detecting a situation without a channel to surface it has no payoff," and now there's a channel. The first two cases, chosen because both were already flagged as deferred in Phase 5's known gaps: a habit whose streak is about to break (`HabitAtRiskJob`) and a task due today (`TaskDueReminderJob`). Delivery channel chosen for both: real browser Web Push (VAPID + the `webpush` Java library, BouncyCastle as the crypto provider), not a placeholder or log-only stub — the new `notification` domain owns subscription lifecycle and send/cleanup, independent of which job triggers it.
+
+Classification insight that came out of reviewing this phase, not decided up front: **Phase 5's rule — "the `@Scheduled` component does nothing but call the service" — was written for `PendingActionExpirationJob`, a single-domain sweep, and doesn't generalize cleanly here.** "Should this habit/task trigger a notification, and what should it say" isn't a fact owned by `HabitService`/`TaskService` alone (that's just "which rows qualify") nor by `NotificationService` alone (that's just "how to deliver") — it's the intersection of both. Pushing the full rule into `HabitServiceImpl`/`TaskServiceImpl` to satisfy the letter of the Phase 5 rule would have made a core business domain depend on `notification`, the same category of coupling the project already refuses for the AI layer (`ai` never leaks into a domain; a domain shouldn't have to know how it gets announced, either). Decided instead: the domain rule (`findHabitsAtRisk()`, `findTasksDueToday()`) stays in each domain service exactly as Phase 5's pattern says; the cross-domain composition (candidates → message copy → send) stays in the job itself, in `scheduler` — the one place in the project already understood to trigger multiple domains without being owned by any of them.
+
+That decision also corrected an assumption behind Phase 5's original test-coverage note ("no dedicated test for `PendingActionExpirationJob` — thin, delegates, same precedent as controllers"): that precedent was never about jobs being *impossible* to test without Spring — `HabitAtRiskJob`/`TaskDueReminderJob` are constructor-injected plain classes, identical in shape to any `ServiceImpl`, and test exactly the same way. It was about an assumption that a `@Scheduled` component stays thin enough not to need one. Once a job carries real cross-domain logic, that assumption no longer holds, and the fix is a direct unit test on the job — not relocating the logic to manufacture a "service" to test instead.
+
+Decisions made:
+
+- **Both reminders run on the same cron, `0 0 20 * * *` with `zone = "${align.timezone}"`** (same timezone config as every other date-sensitive feature since Phase 2). Not yet deliberated whether a single shared evening moment is the right call long-term or just what both jobs happened to copy from each other — flagged below as a gap, not a decision.
+- **`PushSubscriptionServiceImpl.subscribe` is idempotent on a duplicate `endpoint`** (checked via `findByEndpoint` before inserting) — same idiom as `completeHabit`'s idempotency in Habit: a browser retrying a subscribe call is a no-op, not an error.
+- **No AI tool exposes notifications.** This phase is push-only and fully automatic, matching the roadmap's framing of Phase 6 as "detect and tell the user, unprompted" rather than a new conversational surface. Revisit only if a real need to manage subscriptions/preferences through chat shows up — same YAGNI stance the roadmap already applies everywhere else.
+
+Implemented:
+
+- Done: `notification` domain — `PushSubscription` entity + `PushSubscriptionRepository`, migration `V10__add_push_subscriptions.sql`; `NotificationService`/`Impl` (sends via `webpush`'s `PushService`, deletes the subscription when the push endpoint responds `410`/`404` — that status means the browser unregistered it); `PushSubscriptionService`/`Impl` (`subscribe`, `unsubscribe`, `getVapidPublicKey`); `PushServiceConfig` builds the `webpush.PushService` bean from `align.push.vapid.public-key`/`private-key`/`subject`, registering `BouncyCastleProvider` for the crypto.
+- Done: `NotificationController` — `GET /api/notifications/vapid-public-key`, `POST /api/notifications/subscribe`, `DELETE /api/notifications/subscribe`, same `ApiResponse<T>` convention as every other controller.
+- Done: `scheduler.HabitAtRiskJob` / `scheduler.TaskDueReminderJob` — each delegates the domain rule to `HabitService.findHabitsAtRisk()` / `TaskService.findTasksDueToday()`, then builds the notification copy and calls `NotificationService.notify(...)` per candidate, for the reasons explained above.
+- Done: test coverage — `NotificationServiceImplTest` (6 tests: no-op with no subscriptions, successful send, subscription deleted on `410`/`404`, not deleted on success, continues past a failing subscription to the next one), `PushSubscriptionServiceImplTest` (4 tests: create, idempotent on duplicate endpoint, unsubscribe delegation, vapid key getter), `HabitAtRiskJobTest` / `TaskDueReminderJobTest` (3 tests each: no candidates → no notification, one candidate → correctly-addressed notification, multiple candidates → one notification per candidate, verified with no extra interactions). All plain JUnit 5 + Mockito, no Spring context — the jobs needed no different test treatment than any other class in the project, confirming the classification insight above.
+
+Known gaps, deliberate or flagged for a later session:
+
+- Whether `HabitAtRiskJob` and `TaskDueReminderJob` sharing the same `20:00` cron is intentional (one "evening digest" moment) or accidental (copied from each other without deciding) is still unresolved. Revisit if a third reminder needs a different time, or if two simultaneous pushes becomes noticeable friction.
+- No test for `NotificationController` or `PushServiceConfig` — same precedent as every controller and `@Configuration` bean-wiring class in the project; thin, delegates, not business logic.
+- Push-only, no in-app/email fallback if the browser subscription is stale or push is unsupported — not evaluated yet, no evidence it's a real gap.
 
 ---
 
