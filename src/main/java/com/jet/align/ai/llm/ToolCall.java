@@ -1,4 +1,4 @@
-package com.jet.align.ai.model;
+package com.jet.align.ai.llm;
 
 import java.util.Map;
 

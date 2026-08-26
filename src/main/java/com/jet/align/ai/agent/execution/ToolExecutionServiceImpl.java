@@ -1,6 +1,6 @@
 package com.jet.align.ai.agent.execution;
 
-import com.jet.align.ai.model.ToolCall;
+import com.jet.align.ai.llm.ToolCall;
 import com.jet.align.ai.tool.*;
 import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.user.User;

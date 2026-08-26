@@ -8,7 +8,7 @@ import com.jet.align.ai.llm.Message;
 import com.jet.align.ai.llm.SystemMessage;
 import com.jet.align.ai.llm.ToolMessage;
 import com.jet.align.ai.llm.UserMessage;
-import com.jet.align.ai.model.ToolCall;
+import com.jet.align.ai.llm.ToolCall;
 import com.jet.align.common.exception.LlmException;
 import com.jet.align.common.exception.LlmUnavailableException;
 import lombok.RequiredArgsConstructor;

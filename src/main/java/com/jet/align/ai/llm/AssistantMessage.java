@@ -1,7 +1,5 @@
 package com.jet.align.ai.llm;
 
-import com.jet.align.ai.model.ToolCall;
-
 import java.util.List;
 
 /**

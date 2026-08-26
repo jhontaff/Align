@@ -1,4 +1,7 @@
-package com.jet.align.ai.tool;
+package com.jet.align.ai.tool.impl;
+
+import com.jet.align.ai.tool.ToolContext;
+import com.jet.align.ai.tool.ToolResult;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jet.align.task.TaskService;

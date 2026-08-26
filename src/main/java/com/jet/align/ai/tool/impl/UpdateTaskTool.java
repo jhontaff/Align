@@ -1,4 +1,9 @@
-package com.jet.align.ai.tool;
+package com.jet.align.ai.tool.impl;
+
+import com.jet.align.ai.tool.RiskLevel;
+import com.jet.align.ai.tool.Tool;
+import com.jet.align.ai.tool.ToolContext;
+import com.jet.align.ai.tool.ToolResult;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;

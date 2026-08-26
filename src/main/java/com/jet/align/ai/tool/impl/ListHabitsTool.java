@@ -1,67 +1,65 @@
-package com.jet.align.ai.tool;
+package com.jet.align.ai.tool.impl;
+
+import com.jet.align.ai.tool.RiskLevel;
+import com.jet.align.ai.tool.Tool;
+import com.jet.align.ai.tool.ToolContext;
+import com.jet.align.ai.tool.ToolResult;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jet.align.habit.HabitService;
-import com.jet.align.habit.dto.HabitRequest;
 import com.jet.align.habit.dto.HabitResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
-public class CreateHabitTool implements Tool<HabitResponse> {
+public class ListHabitsTool implements Tool<List<HabitResponse>> {
 
     private final HabitService  habitService;
-    private final ObjectMapper objectMapper;
+    private  final ObjectMapper mapper;
 
     private static final String PARAMETERS_SCHEMA = """
             {
               "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "description": "Short, clear name of the habit.",
-                  "maxLength": 100
-                }
-              },
-              "required": ["name"],
+              "properties": {},
+              "required": [],
               "additionalProperties": false
             }
             """;
 
     @Override
     public String name() {
-        return "create_habit";
+        return "list_habits";
     }
 
     @Override
     public String description() {
-        return "Creates a new habit for the authenticated user.";
+        return "Lists the authenticated user's habits, including their current and longest streak.";
     }
 
     @Override
     public Map<String, Object> parameters() {
         try {
-            return objectMapper.readValue(PARAMETERS_SCHEMA, new TypeReference<>() {});
+            return mapper.readValue(PARAMETERS_SCHEMA, new TypeReference<>() {});
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Invalid JSON Schema for tool " + name(), e);
         }
     }
 
     @Override
-    public ToolResult<HabitResponse> execute(ToolContext context) {
-        HabitRequest request = objectMapper.convertValue(context.arguments(), HabitRequest.class);
-        HabitResponse response = habitService.createHabit(context.user(), request);
-        return new ToolResult<>(response, "Habit created successfully.");
-
+    public ToolResult<List<HabitResponse>> execute(ToolContext context) {
+        List<HabitResponse> habits = habitService.getHabits(context.user());
+        return new ToolResult<>(habits, "Habits retrieved successfully.");
     }
 
     @Override
     public RiskLevel risk() {
         return RiskLevel.SAFE;
     }
+
 }
