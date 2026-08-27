@@ -6,11 +6,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -30,5 +28,11 @@ public class PendingActionController {
         pendingActionService.reject(user, id);
         return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK, "Pending action rejected.", null));
     }
+    @GetMapping
+    public  ResponseEntity<ApiResponse<List<PendingActionResponse>>> getPendingActions(@AuthenticationPrincipal User user) {
+        List<PendingActionResponse> response = pendingActionService.list(user);
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK, "Pending action found.", response));
+    }
+
 
 }

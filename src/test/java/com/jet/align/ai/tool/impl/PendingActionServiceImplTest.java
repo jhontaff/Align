@@ -3,6 +3,7 @@ package com.jet.align.ai.tool.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jet.align.ai.tool.PendingAction;
 import com.jet.align.ai.tool.PendingActionRepository;
+import com.jet.align.ai.tool.PendingActionResponse;
 import com.jet.align.ai.tool.PendingActionStatus;
 import com.jet.align.ai.tool.Tool;
 import com.jet.align.ai.tool.ToolContext;
@@ -168,5 +169,32 @@ class PendingActionServiceImplTest {
         // El servicio se construyó con ttlHours = 24 (ver campo `service` arriba).
         assertThat(cutoffCaptor.getValue())
                 .isBetween(before.minus(24, ChronoUnit.HOURS), after.minus(24, ChronoUnit.HOURS));
+    }
+
+    @Test
+    void list_devuelve_las_pending_actions_del_usuario_mapeadas_con_argumentos_deserializados() {
+        Map<String, Object> arguments = Map.of("taskId", "abc-123");
+        PendingAction pending = pendingActionOf("delete_task", arguments, PendingActionStatus.PENDING);
+        when(repository.findByUserAndStatusOrderByCreatedAtDesc(user, PendingActionStatus.PENDING))
+                .thenReturn(List.of(pending));
+
+        List<PendingActionResponse> result = service.list(user);
+
+        assertThat(result).hasSize(1);
+        PendingActionResponse response = result.get(0);
+        assertThat(response.id()).isEqualTo(pending.getId());
+        assertThat(response.toolName()).isEqualTo("delete_task");
+        assertThat(response.arguments()).isEqualTo(arguments);
+        assertThat(response.createdAt()).isEqualTo(pending.getCreatedAt());
+    }
+
+    @Test
+    void list_devuelve_lista_vacia_si_el_usuario_no_tiene_pending_actions() {
+        when(repository.findByUserAndStatusOrderByCreatedAtDesc(user, PendingActionStatus.PENDING))
+                .thenReturn(List.of());
+
+        List<PendingActionResponse> result = service.list(user);
+
+        assertThat(result).isEmpty();
     }
 }

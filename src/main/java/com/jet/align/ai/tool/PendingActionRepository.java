@@ -14,5 +14,7 @@ public interface PendingActionRepository extends JpaRepository<PendingAction, UU
 
     Optional<PendingAction> findByIdAndUser(UUID id, User user);
     List<PendingAction> findByStatusAndCreatedAtBefore(PendingActionStatus status, Instant cutoff);
+    List<PendingAction> findByUserAndStatusOrderByCreatedAtDesc(User user, PendingActionStatus status);
+
 
 }

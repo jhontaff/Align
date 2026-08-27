@@ -7,13 +7,13 @@ import com.jet.align.ai.tool.*;
 import com.jet.align.common.exception.BusinessException;
 import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.user.User;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -68,7 +68,6 @@ public class PendingActionServiceImpl implements PendingActionService {
         return repository.save(pendingAction);
     }
 
-
     private Map<String, Object> deserialize(String json) {
         try {
             return objectMapper.readValue(json, new TypeReference<>() {});
@@ -100,4 +99,16 @@ public class PendingActionServiceImpl implements PendingActionService {
         }
         repository.saveAll(stale);
     }
+
+    @Override
+    public List<PendingActionResponse> list(User user) {
+        return repository.findByUserAndStatusOrderByCreatedAtDesc(user, PendingActionStatus.PENDING).stream()
+                .map(action -> new PendingActionResponse(
+                        action.getId(),
+                        action.getToolName(),
+                        deserialize(action.getArgumentsJson()),
+                        action.getCreatedAt()))
+                .toList();
+    }
+
 }

@@ -281,8 +281,8 @@ Implemented:
 
 Known gaps, deliberate for this first cut:
 
-- No `GET /api/agent/pending-actions` to list a user's own pending actions — the confirmation id is surfaced through the chat reply; add a listing endpoint only if relying on that turns out to be real friction.
-- Confirming through the dedicated endpoint doesn't get woven back into the persisted chat history — if the user confirms outside the conversation (e.g. a future UI button) and later asks the agent "¿la borraste?", the LLM has no way to know, since the only `ToolMessage` that made it into `ConversationMemory` for that turn was the "needs confirmation" placeholder, not the real outcome.
+- ~~No `GET /api/agent/pending-actions` to list a user's own pending actions~~ — resolved 2026-08-27: `PendingActionController` gained a `GET` endpoint, backed by a new `PendingActionService.list(user)` and `PendingActionRepository.findByUserAndStatusOrderByCreatedAtDesc`. Deliberately scoped to `PENDING` only, not full history (`CONFIRMED`/`REJECTED`/`EXPIRED`) — the actual friction being solved was "I lost track of the confirmation id," not a need for an audit log; add status filtering later only if that need shows up. Response DTO (`PendingActionResponse`, flat in `ai.tool` alongside `PendingAction`/`ToolResult` — that package has no `dto` subpackage precedent, unlike `ai.memory`) exposes the deserialized `arguments` map, not the raw JSON string, since an id + tool name alone isn't enough for the user to judge what they'd be confirming. Covered by 2 new cases in `PendingActionServiceImplTest` (mapping, empty result).
+- Confirming through the dedicated endpoint doesn't get woven back into the persisted chat history — if the user confirms outside the conversation (e.g. a future UI button) and later asks the agent "¿la borraste?", the LLM has no way to know, since the only `ToolMessage` that made it into `ConversationMemory` for that turn was the "needs confirmation" placeholder, not the real outcome. Revisited 2026-08-27 and confirmed still hypothetical — no UI calls the endpoint outside manual testing yet. If it becomes real, the preferred fix is **not** appending to `ConversationMemory` (would violate the documented invariant that persisted history is only alternating `UserMessage`/`AssistantMessage` — see [Conversation memory](#conversation-memory-aimemory)) but exposing pending-action status as a tool-resolved query the LLM can call on demand, reusing the same `list(user)` capability the `GET` endpoint above already added.
 - `RiskLevel.EXTERNAL` doesn't exist yet — Phase 7 adds it, with whatever tool first needs it, not before.
 
 ## Phase 4 — Multi-step planning & execution (paused)
@@ -328,7 +328,7 @@ That decision also corrected an assumption behind Phase 5's original test-covera
 
 Decisions made:
 
-- **Both reminders run on the same cron, `0 0 20 * * *` with `zone = "${align.timezone}"`** (same timezone config as every other date-sensitive feature since Phase 2). Not yet deliberated whether a single shared evening moment is the right call long-term or just what both jobs happened to copy from each other — flagged below as a gap, not a decision.
+- **`HabitAtRiskJob` and `TaskDueReminderJob` originally shared the same cron, `0 0 20 * * *`**, both with `zone = "${align.timezone}"` (same timezone config as every other date-sensitive feature since Phase 2). Whether a single shared evening moment was the right call long-term, or just copied between jobs without deciding, was flagged below as an open gap — resolved shortly after: `TaskDueReminderJob` moved to `0 0 18 * * *`, `HabitAtRiskJob` stayed at `20:00`. Two distinct reminder moments now, not one shared "evening digest."
 - **`PushSubscriptionServiceImpl.subscribe` is idempotent on a duplicate `endpoint`** (checked via `findByEndpoint` before inserting) — same idiom as `completeHabit`'s idempotency in Habit: a browser retrying a subscribe call is a no-op, not an error.
 - **No AI tool exposes notifications.** This phase is push-only and fully automatic, matching the roadmap's framing of Phase 6 as "detect and tell the user, unprompted" rather than a new conversational surface. Revisit only if a real need to manage subscriptions/preferences through chat shows up — same YAGNI stance the roadmap already applies everywhere else.
 
@@ -341,7 +341,7 @@ Implemented:
 
 Known gaps, deliberate or flagged for a later session:
 
-- Whether `HabitAtRiskJob` and `TaskDueReminderJob` sharing the same `20:00` cron is intentional (one "evening digest" moment) or accidental (copied from each other without deciding) is still unresolved. Revisit if a third reminder needs a different time, or if two simultaneous pushes becomes noticeable friction.
+- ~~Whether `HabitAtRiskJob` and `TaskDueReminderJob` sharing the same `20:00` cron is intentional or accidental is unresolved~~ — resolved: `TaskDueReminderJob` now runs at `18:00`, `HabitAtRiskJob` at `20:00`. Two distinct times, decided deliberately rather than left as an accidental copy.
 - No test for `NotificationController` or `PushServiceConfig` — same precedent as every controller and `@Configuration` bean-wiring class in the project; thin, delegates, not business logic.
 - Push-only, no in-app/email fallback if the browser subscription is stale or push is unsupported — not evaluated yet, no evidence it's a real gap.
 
