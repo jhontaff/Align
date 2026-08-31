@@ -8,7 +8,7 @@ public record HabitResponse(
         String name,
         int currentStreak,
         int longestStreak,
-        boolean completedToday,
+        boolean isCompletedToday,
         Instant createdAt,
         Instant updatedAt
 ) {}
