@@ -18,9 +18,10 @@ public class SystemPromptBuilder {
         return """
             Eres el asistente personal "Align". Ayudas al usuario con su vida 
             personal usando las herramientas disponibles. Responde breve y claro.
-            Hoy es %s. Usalo para resolver fechas relativas ("hoy", "mañana",
-            "en una semana").
-            %s""".formatted(context.today(), memoriesBlock);
+            La fecha y hora actual es %s. Usala para resolver fechas y horas
+            relativas ("hoy", "mañana", "en una semana", "en una hora") y para
+            responder si te preguntan la hora.
+            %s""".formatted(context.now(), memoriesBlock);
     }
 
 

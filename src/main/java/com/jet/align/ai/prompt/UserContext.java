@@ -1,9 +1,9 @@
 package com.jet.align.ai.prompt;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record UserContext(
-        LocalDate today,
+        LocalDateTime now,
         List<String> memories
 ) {}

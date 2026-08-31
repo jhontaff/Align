@@ -347,6 +347,34 @@ Known gaps, deliberate or flagged for a later session:
 
 ---
 
+# Production deployment (MVP)
+
+Decided 2026-08-31: the first production deploy runs on a **Hostinger VPS** (a self-managed, always-on Linux box), not a scale-to-zero PaaS. This closes out a real architectural question the three `@Scheduled` jobs in `scheduler` (`PendingActionExpirationJob`, `HabitAtRiskJob`, `TaskDueReminderJob`) raised: Spring's `@Scheduled` is an in-process timer, so it inherently requires the JVM to be alive continuously — the question was whether an alternative exists that avoids paying for a live-24/7 instance just for these low-frequency jobs.
+
+Problem framing agreed: two things are coupled only by the current implementation choice, not by necessity — *where the clock lives* (in-process vs. external) and *whether the app process must stay alive continuously*. Three architectures were compared:
+
+- **Option A (chosen)** — keep `@Scheduled` exactly as-is, deployed on an always-on host. Zero code changes to the three jobs; there's no "problem" to solve, because the hosting choice (a VPS) means the machine is up regardless of whether these jobs exist.
+- **Option B (designed, not built)** — decouple the trigger from the process: turn the three jobs into HTTP-invokable endpoints (a new thin controller in `scheduler`, machine-to-machine auth via a shared-secret header rather than the user JWT chain, since there's no `User` involved), remove `@Scheduled`/`@EnableScheduling`, and let an external cron call those endpoints on schedule while the app runs on a scale-to-zero platform (Render, Fly.io, Cloud Run) that sleeps when idle. Cloud Run + Cloud Scheduler was identified as the architecturally cleanest version of this (Cloud Scheduler can invoke Cloud Run with an IAM-managed identity token, removing the need to hand-roll the shared secret), but rejected as a platform choice specifically because Align's stated goal is learning software/agent architecture, not GCP's IAM model — disproportionate operational complexity for what it buys here. Render was identified as the pragmatic platform if Option B had been chosen (native Cron Jobs + scale-to-zero Web Service, near-zero DevOps overhead), with a real gotcha flagged: Render's free Postgres tier expires after 90 days, so a stable deploy would need Render's paid Postgres or an external managed Postgres (Supabase/Neon).
+- **Option C (rejected outright)** — reimplement the job logic as true serverless functions (AWS Lambda + EventBridge) outside Spring Boot. Rejected for the same reason Redis/Kafka/microservices are already rejected elsewhere in this roadmap: real architectural cost (splitting domain logic out of the monolith into a second deployable with its own DB access) with no concrete Align problem demanding it.
+
+A second real risk was identified and explicitly not solved: Option B trades away the implicit exactly-once guarantee `@Scheduled`'s single in-process timer gives for free — an external cron calling an HTTP endpoint can be at-least-once (retries on timeout), which for `HabitAtRiskJob`/`TaskDueReminderJob` could mean a duplicate push notification on the same day (no existing "already notified today" guard; `PendingActionExpirationJob` is unaffected since `expireStale()` is naturally idempotent). Decided not to build idempotency guards preemptively — same YAGNI stance as the rest of this roadmap: revisit only if a duplicate is actually observed, since the fix is small and reactive, not a rearchitecture. Moot for the path actually chosen (Option A never introduces the at-least-once risk), recorded here in case Option B is revisited later.
+
+**Why Option A won**: not because it's architecturally superior — Option B was fully designed down to the controller/auth contract — but because of two things this project explicitly values over it: real cost savings (a VPS is typically cheaper per month than a PaaS's paid tier + managed Postgres + cron add-on, even as a flat 24/7 bill rather than pay-for-use), and the user explicitly wants to learn VPS/ops management as part of Align's stated learning goal — that goal already covers backend/agent architecture, and extends naturally to the deployment side rather than stopping at the code boundary. Revisit only if VPS operational burden (see checklist below) turns out to outweigh those two reasons in practice; the Option B design above stays valid as a fallback, not discarded.
+
+Implemented as a result of this decision: `PendingActionExpirationJob`'s `@Scheduled(fixedRate = ...)` changed from hourly to every 8 hours (`8 * 60 * 60 * 1000`) — same "insignificant delay vs. the 24h TTL" reasoning from Phase 5, just a coarser interval, reducing DB/log load with no behavior change. This survives the pivot to VPS on its own merits, even though its *other* original motivation (fewer cold-starts had Option B/scale-to-zero been chosen) no longer applies.
+
+Not yet done — the VPS setup itself, tracked here so a new session knows where this stands:
+
+- VPS provisioning (Ubuntu LTS assumed), SSH access, non-root user to run the app.
+- JDK 21 install (matches the app's existing Java version).
+- Postgres install + DB/user creation — Flyway migrates automatically on app startup, no manual schema step beyond that.
+- `systemd` unit for process supervision (auto-restart on crash/reboot) — replaces what a managed PaaS gives for free; without it, a crashed JVM stays down until someone notices.
+- nginx or Caddy reverse proxy + Let's Encrypt/certbot for TLS — **not optional**: Web Push requires HTTPS for the browser to accept a subscription (except on `localhost`), so this is a hard functional requirement of the `notification` domain, not just a security nicety.
+- Deploy mechanism (manual build+SCP+restart is acceptable for this first cut; scripting/CI can come later).
+- Env vars/secrets for the `systemd` unit — same externalized-config pattern the project already uses (`application-dev.properties`/`application-prod.properties` are gitignored), just needs a home in the VPS's service definition rather than a PaaS's secrets UI.
+
+---
+
 # AI architecture
 
 The AI layer orchestrates business capabilities.
