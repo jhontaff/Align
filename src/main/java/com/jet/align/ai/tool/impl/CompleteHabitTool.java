@@ -29,7 +29,7 @@ public class CompleteHabitTool implements Tool<HabitResponse> {
               "properties": {
                 "habitId": {
                   "type": "string",
-                  "description": "The unique identifier of the habit to mark as completed for today."
+                  "description": "The unique identifier of the habit to mark as completed for now."
                 }
               },
               "required": ["habitId"],
@@ -44,7 +44,7 @@ public class CompleteHabitTool implements Tool<HabitResponse> {
 
     @Override
     public String description() {
-        return "Marks a habit as completed for today, given its id. If you only know the habit's name, call list_habits first to find its id.";
+        return "Marks a habit as completed for now, given its id. If you only know the habit's name, call list_habits first to find its id.";
     }
 
     @Override

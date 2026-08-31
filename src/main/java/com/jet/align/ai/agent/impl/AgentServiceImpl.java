@@ -10,7 +10,6 @@ import com.jet.align.ai.llm.*;
 import com.jet.align.ai.memory.ConversationMemory;
 import com.jet.align.ai.memory.UserMemoryService;
 import com.jet.align.ai.memory.dto.MemoryResponse;
-import com.jet.align.ai.llm.ToolCall;
 import com.jet.align.ai.prompt.SystemPromptBuilder;
 import com.jet.align.ai.prompt.UserContext;
 import com.jet.align.ai.tool.ToolRegistry;
@@ -24,8 +23,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -66,11 +66,11 @@ public class AgentServiceImpl implements AgentService {
     @Override
     public AgentResponse chat(String userMessage, User user) {
 
-        LocalDate today = LocalDate.now(timezone);
+        LocalDateTime now = LocalDateTime.now(timezone).truncatedTo(ChronoUnit.MINUTES);
         List<String> memories = userMemoryService.list(user).stream()
                 .map(MemoryResponse::content)
                 .toList();
-        String systemPrompt = SystemPromptBuilder.build(new UserContext(today, memories));
+        String systemPrompt = SystemPromptBuilder.build(new UserContext(now, memories));
 
         List<Message> messages = new ArrayList<>();
         UserMessage userTurn = new UserMessage(userMessage);
