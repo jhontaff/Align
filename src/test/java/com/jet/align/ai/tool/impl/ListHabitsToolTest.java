@@ -27,8 +27,8 @@ class ListHabitsToolTest {
     @Test
     void execute_delega_en_getHabits_y_devuelve_la_lista_tal_cual() {
         List<HabitResponse> habits = List.of(
-                new HabitResponse(UUID.randomUUID(), "Meditar", 3, 5, Instant.now(), Instant.now()),
-                new HabitResponse(UUID.randomUUID(), "Ejercicio", 0, 2, Instant.now(), Instant.now()));
+                new HabitResponse(UUID.randomUUID(), "Meditar", 3, 5, true, Instant.now(), Instant.now()),
+                new HabitResponse(UUID.randomUUID(), "Ejercicio", 0, 2, false, Instant.now(), Instant.now()));
         when(habitService.getHabits(user)).thenReturn(habits);
 
         // list_habits no toma argumentos -- el schema no declara properties, así

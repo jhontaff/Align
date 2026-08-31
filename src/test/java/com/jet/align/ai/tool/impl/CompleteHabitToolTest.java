@@ -27,7 +27,7 @@ class CompleteHabitToolTest {
 
     @Test
     void execute_convierte_habitId_de_string_a_uuid_y_delega_en_completeHabit() {
-        HabitResponse expected = new HabitResponse(habitId, "Meditar", 4, 4, Instant.now(), Instant.now());
+        HabitResponse expected = new HabitResponse(habitId, "Meditar", 4, 4, true, Instant.now(), Instant.now());
         when(habitService.completeHabit(user, habitId)).thenReturn(expected);
 
         // habitId llega como String crudo, tal como lo arma el LLM a partir del

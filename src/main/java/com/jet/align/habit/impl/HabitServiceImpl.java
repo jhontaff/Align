@@ -40,7 +40,8 @@ public class HabitServiceImpl implements HabitService {
     public HabitResponse createHabit(User user, HabitRequest habitRequest) {
         Habit habit  = mapper.toEntity(habitRequest);
         habit.setUser(user);
-        return mapper.toResponse(habitRepository.save(habit), 0, 0);
+        boolean isCompletedToday = false;
+        return mapper.toResponse(habitRepository.save(habit), 0, 0, isCompletedToday);
     }
 
     @Override
@@ -52,7 +53,8 @@ public class HabitServiceImpl implements HabitService {
                     List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
                     int currentStreak = calculateStreak(completions);
                     int longestStreak = calculateLongestStreak(completions);
-                    return mapper.toResponse(habit, currentStreak, longestStreak);
+                    boolean isCompletedToday = isCompletedToday(completions);
+                    return mapper.toResponse(habit, currentStreak, longestStreak, isCompletedToday);
                 })
                 .toList();
     }
@@ -67,7 +69,8 @@ public class HabitServiceImpl implements HabitService {
         List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
         int currentStreak = calculateStreak(completions);
         int longestStreak = calculateLongestStreak(completions);
-        return mapper.toResponse(habit, currentStreak, longestStreak);
+        boolean isCompletedToday = isCompletedToday(completions);
+        return mapper.toResponse(habit, currentStreak, longestStreak, isCompletedToday);
 
     }
 
@@ -80,7 +83,8 @@ public class HabitServiceImpl implements HabitService {
         List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
         int currentStreak = calculateStreak(completions);
         int longestStreak = calculateLongestStreak(completions);
-        return mapper.toResponse(habit, currentStreak, longestStreak);
+        boolean isCompletedToday = isCompletedToday(completions);
+        return mapper.toResponse(habit, currentStreak, longestStreak, isCompletedToday);
 
     }
 
@@ -110,19 +114,17 @@ public class HabitServiceImpl implements HabitService {
         List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
         int currentStreak = calculateStreak(completions);
         int longestStreak = calculateLongestStreak(completions);
-
-        return mapper.toResponse(habit, currentStreak, longestStreak);
+        boolean isCompletedToday = isCompletedToday(completions);
+        return mapper.toResponse(habit, currentStreak, longestStreak, isCompletedToday);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<Habit> findHabitsAtRisk() {
-        LocalDate today = LocalDate.now(timezone);
         return habitRepository.findAll().stream()
                 .filter(habit -> {
                     List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
-                    boolean completedToday = !completions.isEmpty() && completions.getFirst().getDate().equals(today);
-                    return !completedToday && calculateStreak(completions) > 0;
+                    return !isCompletedToday(completions) && calculateStreak(completions) > 0;
                 })
                 .toList();
     }
@@ -159,5 +161,11 @@ public class HabitServiceImpl implements HabitService {
         }
         return longest;
     }
+
+    private boolean isCompletedToday(List<HabitCompletion> completions) {
+        LocalDate today = LocalDate.now(timezone);
+        return !completions.isEmpty() && completions.getFirst().getDate().equals(today);
+    }
+
 
 }

@@ -23,14 +23,14 @@ class HabitControllerTest {
     private final HabitController controller = new HabitController(habitService);
     private final User user = new User();
 
-    private HabitResponse sampleResponse(UUID id, int currentStreak, int longestStreak) {
-        return new HabitResponse(id, "Meditar", currentStreak, longestStreak, Instant.now(), Instant.now());
+    private HabitResponse sampleResponse(UUID id, int currentStreak, int longestStreak, boolean completedToday) {
+        return new HabitResponse(id, "Meditar", currentStreak, longestStreak, completedToday, Instant.now(), Instant.now());
     }
 
     @Test
     void createHabit_devuelve_201_con_el_habito_creado_por_el_service() {
         HabitRequest request = new HabitRequest("Meditar");
-        HabitResponse expected = sampleResponse(UUID.randomUUID(), 0, 0);
+        HabitResponse expected = sampleResponse(UUID.randomUUID(), 0, 0, false);
         when(habitService.createHabit(user, request)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<HabitResponse>> response = controller.createHabit(request, user);
@@ -42,7 +42,7 @@ class HabitControllerTest {
     @Test
     void getHabitById_devuelve_200_con_el_habito_del_service() {
         UUID id = UUID.randomUUID();
-        HabitResponse expected = sampleResponse(id, 3, 5);
+        HabitResponse expected = sampleResponse(id, 3, 5, true);
         when(habitService.getHabitById(user, id)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<HabitResponse>> response = controller.getHabitById(id, user);
@@ -53,7 +53,7 @@ class HabitControllerTest {
 
     @Test
     void getHabits_devuelve_200_con_la_lista_del_service() {
-        HabitResponse expected = sampleResponse(UUID.randomUUID(), 1, 1);
+        HabitResponse expected = sampleResponse(UUID.randomUUID(), 1, 1, true);
         when(habitService.getHabits(user)).thenReturn(List.of(expected));
 
         ResponseEntity<ApiResponse<List<HabitResponse>>> response = controller.getHabits(user);
@@ -66,7 +66,7 @@ class HabitControllerTest {
     void updateHabit_devuelve_200_con_el_habito_actualizado() {
         UUID id = UUID.randomUUID();
         HabitRequest request = new HabitRequest("Meditar 10 minutos");
-        HabitResponse expected = sampleResponse(id, 2, 2);
+        HabitResponse expected = sampleResponse(id, 2, 2, true);
         when(habitService.updateHabit(user, id, request)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<HabitResponse>> response = controller.updateHabit(id, request, user);
@@ -89,7 +89,7 @@ class HabitControllerTest {
     @Test
     void completeHabit_devuelve_200_con_el_habito_y_streak_actualizados() {
         UUID id = UUID.randomUUID();
-        HabitResponse expected = sampleResponse(id, 4, 5);
+        HabitResponse expected = sampleResponse(id, 4, 5, true);
         when(habitService.completeHabit(user, id)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<HabitResponse>> response = controller.completeHabit(id, user);

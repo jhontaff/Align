@@ -31,7 +31,7 @@ class CreateHabitToolTest {
     @Test
     void execute_convierte_los_argumentos_crudos_del_llm_y_delega_en_createHabit() {
         HabitResponse expected = new HabitResponse(
-                UUID.randomUUID(), "Meditar", 0, 0, Instant.now(), Instant.now());
+                UUID.randomUUID(), "Meditar", 0, 0, false, Instant.now(), Instant.now());
         when(habitService.createHabit(eq(user), any(HabitRequest.class))).thenReturn(expected);
 
         // "name" llega tal como lo arma el LLM a partir del JSON schema: un String
