@@ -3,6 +3,7 @@ package com.jet.align.ai.tool.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jet.align.ai.tool.PendingAction;
 import com.jet.align.ai.tool.PendingActionRepository;
+import com.jet.align.ai.tool.PendingActionResponse;
 import com.jet.align.ai.tool.PendingActionStatus;
 import com.jet.align.ai.tool.Tool;
 import com.jet.align.ai.tool.ToolContext;
@@ -14,6 +15,9 @@ import com.jet.align.user.User;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,7 +36,7 @@ class PendingActionServiceImplTest {
     private final ToolRegistry toolRegistry = mock(ToolRegistry.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PendingActionServiceImpl service =
-            new PendingActionServiceImpl(repository, toolRegistry, objectMapper);
+            new PendingActionServiceImpl(repository, toolRegistry, objectMapper,24);
     private final User user = new User();
 
     private PendingAction pendingActionOf(String toolName, Map<String, Object> arguments, PendingActionStatus status) {
@@ -132,5 +137,64 @@ class PendingActionServiceImplTest {
 
         assertThatThrownBy(() -> service.reject(user, id))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void expireStale_marca_como_expired_las_pending_actions_devueltas_por_el_repository() {
+        PendingAction stale1 = pendingActionOf("delete_task", Map.of(), PendingActionStatus.PENDING);
+        PendingAction stale2 = pendingActionOf("update_memory", Map.of(), PendingActionStatus.PENDING);
+        List<PendingAction> staleActions = List.of(stale1, stale2);
+        when(repository.findByStatusAndCreatedAtBefore(eq(PendingActionStatus.PENDING), any(Instant.class)))
+                .thenReturn(staleActions);
+
+        service.expireStale();
+
+        assertThat(stale1.getStatus()).isEqualTo(PendingActionStatus.EXPIRED);
+        assertThat(stale2.getStatus()).isEqualTo(PendingActionStatus.EXPIRED);
+        verify(repository).saveAll(staleActions);
+    }
+
+    @Test
+    void expireStale_calcula_el_cutoff_a_partir_del_ttl_configurado() {
+        when(repository.findByStatusAndCreatedAtBefore(eq(PendingActionStatus.PENDING), any(Instant.class)))
+                .thenReturn(List.of());
+
+        Instant before = Instant.now();
+        service.expireStale();
+        Instant after = Instant.now();
+
+        ArgumentCaptor<Instant> cutoffCaptor = ArgumentCaptor.forClass(Instant.class);
+        verify(repository).findByStatusAndCreatedAtBefore(eq(PendingActionStatus.PENDING), cutoffCaptor.capture());
+
+        // El servicio se construyó con ttlHours = 24 (ver campo `service` arriba).
+        assertThat(cutoffCaptor.getValue())
+                .isBetween(before.minus(24, ChronoUnit.HOURS), after.minus(24, ChronoUnit.HOURS));
+    }
+
+    @Test
+    void list_devuelve_las_pending_actions_del_usuario_mapeadas_con_argumentos_deserializados() {
+        Map<String, Object> arguments = Map.of("taskId", "abc-123");
+        PendingAction pending = pendingActionOf("delete_task", arguments, PendingActionStatus.PENDING);
+        when(repository.findByUserAndStatusOrderByCreatedAtDesc(user, PendingActionStatus.PENDING))
+                .thenReturn(List.of(pending));
+
+        List<PendingActionResponse> result = service.list(user);
+
+        assertThat(result).hasSize(1);
+        PendingActionResponse response = result.get(0);
+        assertThat(response.id()).isEqualTo(pending.getId());
+        assertThat(response.toolName()).isEqualTo("delete_task");
+        assertThat(response.arguments()).isEqualTo(arguments);
+        assertThat(response.createdAt()).isEqualTo(pending.getCreatedAt());
+    }
+
+    @Test
+    void list_devuelve_lista_vacia_si_el_usuario_no_tiene_pending_actions() {
+        when(repository.findByUserAndStatusOrderByCreatedAtDesc(user, PendingActionStatus.PENDING))
+                .thenReturn(List.of());
+
+        List<PendingActionResponse> result = service.list(user);
+
+        assertThat(result).isEmpty();
     }
 }

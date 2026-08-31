@@ -1,6 +1,7 @@
 package com.jet.align.ai.agent.execution;
 
-import com.jet.align.ai.model.ToolCall;
+import com.jet.align.ai.agent.execution.impl.ToolExecutionServiceImpl;
+import com.jet.align.ai.llm.ToolCall;
 import com.jet.align.ai.tool.PendingAction;
 import com.jet.align.ai.tool.PendingActionService;
 import com.jet.align.ai.tool.RiskLevel;

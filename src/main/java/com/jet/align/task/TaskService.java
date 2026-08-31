@@ -8,6 +8,7 @@ import com.jet.align.user.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface TaskService {
@@ -20,4 +21,5 @@ public interface TaskService {
     );
     public void deleteTask(UUID id, User user);
     public Page<TaskResponse> getTasks(User user, Pageable pageable, TaskStatus status);
+    List<Task> findTasksDueToday();
 }

@@ -9,7 +9,7 @@ import com.jet.align.ai.agent.impl.AgentServiceImpl;
 import com.jet.align.ai.llm.*;
 import com.jet.align.ai.memory.ConversationMemory;
 import com.jet.align.ai.memory.UserMemoryService;
-import com.jet.align.ai.model.ToolCall;
+import com.jet.align.ai.llm.ToolCall;
 import com.jet.align.ai.tool.ToolRegistry;
 import com.jet.align.ai.tool.ToolResult;
 import com.jet.align.common.exception.AgentException;

@@ -1,6 +1,5 @@
 package com.jet.align.ai.prompt;
 
-import java.time.LocalDate;
 import java.util.stream.Collectors;
 
 public class SystemPromptBuilder {
@@ -17,7 +16,7 @@ public class SystemPromptBuilder {
                 + "\n";
 
         return """
-            Eres el asistente personal "Align". Ayudas al usuario con su vida
+            Eres el asistente personal "Align". Ayudas al usuario con su vida 
             personal usando las herramientas disponibles. Responde breve y claro.
             Hoy es %s. Usalo para resolver fechas relativas ("hoy", "mañana",
             "en una semana").

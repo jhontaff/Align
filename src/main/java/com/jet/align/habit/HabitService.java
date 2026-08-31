@@ -13,4 +13,5 @@ public interface HabitService {
     void deleteHabit(User user, UUID habitId);
     HabitResponse completeHabit(User user, UUID habitId);
     HabitResponse getHabitById(User user, UUID habitId);
+    List<Habit> findHabitsAtRisk();
 }

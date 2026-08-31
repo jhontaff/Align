@@ -11,7 +11,8 @@ public interface HabitMapper {
 
     @Mapping(target = "currentStreak", source = "currentStreak")
     @Mapping(target = "longestStreak", source = "longestStreak")
-    HabitResponse toResponse(Habit habit, int currentStreak, int longestStreak);
+    @Mapping(target = "isCompletedToday", source = "isCompletedToday")
+    HabitResponse toResponse(Habit habit, int currentStreak, int longestStreak, boolean isCompletedToday);
 
     void updateEntity(HabitRequest request, @MappingTarget Habit habit);
 }

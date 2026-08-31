@@ -197,9 +197,9 @@ Decided 2026-08-24: Align stops adding new business domains for now (the Project
 1. **Persistent memory** — complete, see below.
 2. **User context** — complete, see below.
 3. **Authorization & confirmation** — complete, see below.
-4. **Multi-step planning & execution** — evolve beyond the current single tool-calling loop only once it stops being sufficient for a real case; keep it as simple as possible until then.
-5. **Scheduler & events** — let Align react to time and system events. Never use the LLM for deterministic problems plain logic already solves.
-6. **Proactivity & notifications** — move from a purely reactive assistant to one that can detect situations worth surfacing and tell the user, unprompted.
+4. **Multi-step planning & execution** — paused, see below.
+5. **Scheduler & events** — first case implemented, see below.
+6. **Proactivity & notifications** — move from a purely reactive assistant to one that can detect situations worth surfacing and tell the user, unprompted. First cases implemented, see below.
 7. **External integrations** (calendar, email, weather, ...) — kept decoupled from the agent itself, with provider-specific details encapsulated the same way `ai.llm.<provider>` already isolates Gemini.
 8. **Voice** — treated as one more interface to the assistant, not a core architectural concern.
 9. **NFC / physical triggers** — explored as a way to activate existing contexts or actions, not as a new domain.
@@ -281,9 +281,69 @@ Implemented:
 
 Known gaps, deliberate for this first cut:
 
-- No `GET /api/agent/pending-actions` to list a user's own pending actions — the confirmation id is surfaced through the chat reply; add a listing endpoint only if relying on that turns out to be real friction.
-- Confirming through the dedicated endpoint doesn't get woven back into the persisted chat history — if the user confirms outside the conversation (e.g. a future UI button) and later asks the agent "¿la borraste?", the LLM has no way to know, since the only `ToolMessage` that made it into `ConversationMemory` for that turn was the "needs confirmation" placeholder, not the real outcome.
+- ~~No `GET /api/agent/pending-actions` to list a user's own pending actions~~ — resolved 2026-08-27: `PendingActionController` gained a `GET` endpoint, backed by a new `PendingActionService.list(user)` and `PendingActionRepository.findByUserAndStatusOrderByCreatedAtDesc`. Deliberately scoped to `PENDING` only, not full history (`CONFIRMED`/`REJECTED`/`EXPIRED`) — the actual friction being solved was "I lost track of the confirmation id," not a need for an audit log; add status filtering later only if that need shows up. Response DTO (`PendingActionResponse`, flat in `ai.tool` alongside `PendingAction`/`ToolResult` — that package has no `dto` subpackage precedent, unlike `ai.memory`) exposes the deserialized `arguments` map, not the raw JSON string, since an id + tool name alone isn't enough for the user to judge what they'd be confirming. Covered by 2 new cases in `PendingActionServiceImplTest` (mapping, empty result).
+- Confirming through the dedicated endpoint doesn't get woven back into the persisted chat history — if the user confirms outside the conversation (e.g. a future UI button) and later asks the agent "¿la borraste?", the LLM has no way to know, since the only `ToolMessage` that made it into `ConversationMemory` for that turn was the "needs confirmation" placeholder, not the real outcome. Revisited 2026-08-27 and confirmed still hypothetical — no UI calls the endpoint outside manual testing yet. If it becomes real, the preferred fix is **not** appending to `ConversationMemory` (would violate the documented invariant that persisted history is only alternating `UserMessage`/`AssistantMessage` — see [Conversation memory](#conversation-memory-aimemory)) but exposing pending-action status as a tool-resolved query the LLM can call on demand, reusing the same `list(user)` capability the `GET` endpoint above already added.
 - `RiskLevel.EXTERNAL` doesn't exist yet — Phase 7 adds it, with whatever tool first needs it, not before.
+
+## Phase 4 — Multi-step planning & execution (paused)
+
+Paused 2026-08-25, immediately after Phase 3 shipped, by applying the roadmap's own gate: "evolve beyond the current single tool-calling loop only once it stops being sufficient for a real case." Finding that closed the question for now: `AgentServiceImpl.chat`'s existing loop (`MAX_STEPS = 8`) already does reactive multi-step tool chaining within a single turn — the LLM sees each tool's result and can call another tool before finalizing (e.g. `list_habits` → `complete_habit` already resolves in one round-trip today). What Phase 4 would add on top of that — an explicit up-front plan instead of reactive step-by-step decisions, rollback on partial failure, or continuity of a task across multiple conversation turns — has no real case behind it: no request has hit the 8-step ceiling, needed to survive across turns, or needed a plan shown to the user before executing. Revisit only when one does; the reasoning here stays valid meanwhile, same as the paused Project/Goal/Note domain roadmap above.
+
+## Phase 5 — Scheduler & events (first case implemented)
+
+Problem framing agreed: unlike Phases 1–3, this phase has no single feature to build — it's a mechanism ("let Align react to time") that different domains plug into over time, not a one-shot deliverable. The first concrete case, chosen specifically because it doesn't need Phase 6 to have value: `PendingAction` rows left `PENDING` forever have no TTL today — a stale, still-confirmable destructive action with no context, growing the table without bound. Chosen over Task due-date or Habit daily reminders because those need a channel to actually surface something to the user, which is Phase 6's job — this case is pure deterministic housekeeping with no user-facing output at all, so it doesn't have to wait.
+
+Decisions made:
+
+- **Spring's `@Scheduled` (fixed rate), not Quartz or any cron library.** Same guiding constraint as the rest of this roadmap — Align is a single-instance personal app, nothing here needs persistence-backed scheduling that survives missed runs across restarts. Revisit only if a real need (e.g. catch-up after downtime) shows up.
+- **Mechanism/business-rule split mirrors "controllers delegate."** The `@Scheduled` component (`PendingActionExpirationJob`, in a new `scheduler` package — sibling to `ai`/`common`, not nested inside `ai.tool`, since the scheduler is meant to trigger multiple domains over time, not just this one) does nothing but call `PendingActionService.expireStale()`. The actual rule — what counts as stale, what happens to it — lives in the service, same as every other domain's business logic.
+- **`expireStale()` takes no `User` argument** — the first service method in the project not scoped to one user. A sweep runs for the whole system, not "on behalf of" anyone, so the `findByIdAndUser` ownership pattern used everywhere else doesn't apply here.
+- **New `PendingActionStatus.EXPIRED` value, not a reuse of `REJECTED`.** Weighed explicitly: reusing `REJECTED` costs zero schema change but conflates two different meanings — "the user said no" vs. "nobody responded in time." Chosen to add the real value because it's needed the moment the known Phase 3 gap (no `GET /api/agent/pending-actions` listing endpoint) gets built — that listing would need to tell the two apart, and retrofitting the distinction later would mean reclassifying already-persisted rows.
+- **TTL is a single global config value** (`align.pending-action.ttl-hours=24`), same precedent as `align.timezone` from Phase 2 — not per-user, proportional to Align still being single-operator.
+- **Sweep runs hourly** (`fixedRate = 60 * 60 * 1000`), chosen relative to the 24h TTL: bounds the delay between an action crossing the TTL and actually being marked `EXPIRED` to ~1h, insignificant against 24h and cheap at this volume (one derived query, usually zero rows).
+
+Implemented:
+
+- Done: `PendingActionStatus.EXPIRED` and `PendingActionRepository.findByStatusAndCreatedAtBefore(PendingActionStatus, Instant)`.
+- Done: `PendingActionService.expireStale()` / impl — finds stale `PENDING` rows via the repository, sets each to `EXPIRED`, `saveAll`s them. Same `@Transactional` override discipline as every other write method on a `readOnly = true` service.
+- Done: `PendingActionServiceImpl` switched from `@RequiredArgsConstructor` to an explicit constructor to carry `@Value("${align.pending-action.ttl-hours}") int ttlHours` — same idiom `AgentServiceImpl` established in Phase 2: a `@Value`-sourced primitive plus tests that construct the service directly means `@RequiredArgsConstructor` alone isn't enough.
+- Done: `scheduler` package + `PendingActionExpirationJob` (`@Component`, `@Scheduled`), delegating to `expireStale()`. `@EnableScheduling` added to `AlignApplication` — required for `@Scheduled` to fire at all; easy to build the job correctly and still have it silently never run without this.
+- Done: `application.properties` gained `align.pending-action.ttl-hours=24`.
+- Done: test coverage — 2 new cases in `PendingActionServiceImplTest` (`expireStale` marks stale `PENDING` rows `EXPIRED` and persists them via `saveAll`; the cutoff passed to the repository is verified against the configured `ttlHours` via `ArgumentCaptor`). No dedicated test for `PendingActionExpirationJob` itself — thin, delegates, same precedent as controllers never getting a test for their one-line delegation.
+
+Known gaps, deliberate for this first cut:
+
+- ~~No other domain plugs into the scheduler yet~~ — resolved by Phase 6: `HabitAtRiskJob` and `TaskDueReminderJob` now plug into `scheduler`, see below.
+- No catch-up/backfill if the app is down when a scheduled run would have fired — `@Scheduled(fixedRate = ...)` just skips missed runs. Acceptable for housekeeping with a 24h TTL and hourly sweeps; revisit only if a future scheduled job needs a stronger guarantee.
+
+---
+
+## Phase 6 — Proactivity & notifications (first cases implemented)
+
+Problem framing agreed: this phase is the payoff Phase 5 was built for — "detecting a situation without a channel to surface it has no payoff," and now there's a channel. The first two cases, chosen because both were already flagged as deferred in Phase 5's known gaps: a habit whose streak is about to break (`HabitAtRiskJob`) and a task due today (`TaskDueReminderJob`). Delivery channel chosen for both: real browser Web Push (VAPID + the `webpush` Java library, BouncyCastle as the crypto provider), not a placeholder or log-only stub — the new `notification` domain owns subscription lifecycle and send/cleanup, independent of which job triggers it.
+
+Classification insight that came out of reviewing this phase, not decided up front: **Phase 5's rule — "the `@Scheduled` component does nothing but call the service" — was written for `PendingActionExpirationJob`, a single-domain sweep, and doesn't generalize cleanly here.** "Should this habit/task trigger a notification, and what should it say" isn't a fact owned by `HabitService`/`TaskService` alone (that's just "which rows qualify") nor by `NotificationService` alone (that's just "how to deliver") — it's the intersection of both. Pushing the full rule into `HabitServiceImpl`/`TaskServiceImpl` to satisfy the letter of the Phase 5 rule would have made a core business domain depend on `notification`, the same category of coupling the project already refuses for the AI layer (`ai` never leaks into a domain; a domain shouldn't have to know how it gets announced, either). Decided instead: the domain rule (`findHabitsAtRisk()`, `findTasksDueToday()`) stays in each domain service exactly as Phase 5's pattern says; the cross-domain composition (candidates → message copy → send) stays in the job itself, in `scheduler` — the one place in the project already understood to trigger multiple domains without being owned by any of them.
+
+That decision also corrected an assumption behind Phase 5's original test-coverage note ("no dedicated test for `PendingActionExpirationJob` — thin, delegates, same precedent as controllers"): that precedent was never about jobs being *impossible* to test without Spring — `HabitAtRiskJob`/`TaskDueReminderJob` are constructor-injected plain classes, identical in shape to any `ServiceImpl`, and test exactly the same way. It was about an assumption that a `@Scheduled` component stays thin enough not to need one. Once a job carries real cross-domain logic, that assumption no longer holds, and the fix is a direct unit test on the job — not relocating the logic to manufacture a "service" to test instead.
+
+Decisions made:
+
+- **`HabitAtRiskJob` and `TaskDueReminderJob` originally shared the same cron, `0 0 20 * * *`**, both with `zone = "${align.timezone}"` (same timezone config as every other date-sensitive feature since Phase 2). Whether a single shared evening moment was the right call long-term, or just copied between jobs without deciding, was flagged below as an open gap — resolved shortly after: `TaskDueReminderJob` moved to `0 0 18 * * *`, `HabitAtRiskJob` stayed at `20:00`. Two distinct reminder moments now, not one shared "evening digest."
+- **`PushSubscriptionServiceImpl.subscribe` is idempotent on a duplicate `endpoint`** (checked via `findByEndpoint` before inserting) — same idiom as `completeHabit`'s idempotency in Habit: a browser retrying a subscribe call is a no-op, not an error.
+- **No AI tool exposes notifications.** This phase is push-only and fully automatic, matching the roadmap's framing of Phase 6 as "detect and tell the user, unprompted" rather than a new conversational surface. Revisit only if a real need to manage subscriptions/preferences through chat shows up — same YAGNI stance the roadmap already applies everywhere else.
+
+Implemented:
+
+- Done: `notification` domain — `PushSubscription` entity + `PushSubscriptionRepository`, migration `V10__add_push_subscriptions.sql`; `NotificationService`/`Impl` (sends via `webpush`'s `PushService`, deletes the subscription when the push endpoint responds `410`/`404` — that status means the browser unregistered it); `PushSubscriptionService`/`Impl` (`subscribe`, `unsubscribe`, `getVapidPublicKey`); `PushServiceConfig` builds the `webpush.PushService` bean from `align.push.vapid.public-key`/`private-key`/`subject`, registering `BouncyCastleProvider` for the crypto.
+- Done: `NotificationController` — `GET /api/notifications/vapid-public-key`, `POST /api/notifications/subscribe`, `DELETE /api/notifications/subscribe`, same `ApiResponse<T>` convention as every other controller.
+- Done: `scheduler.HabitAtRiskJob` / `scheduler.TaskDueReminderJob` — each delegates the domain rule to `HabitService.findHabitsAtRisk()` / `TaskService.findTasksDueToday()`, then builds the notification copy and calls `NotificationService.notify(...)` per candidate, for the reasons explained above.
+- Done: test coverage — `NotificationServiceImplTest` (6 tests: no-op with no subscriptions, successful send, subscription deleted on `410`/`404`, not deleted on success, continues past a failing subscription to the next one), `PushSubscriptionServiceImplTest` (4 tests: create, idempotent on duplicate endpoint, unsubscribe delegation, vapid key getter), `HabitAtRiskJobTest` / `TaskDueReminderJobTest` (3 tests each: no candidates → no notification, one candidate → correctly-addressed notification, multiple candidates → one notification per candidate, verified with no extra interactions). All plain JUnit 5 + Mockito, no Spring context — the jobs needed no different test treatment than any other class in the project, confirming the classification insight above.
+
+Known gaps, deliberate or flagged for a later session:
+
+- ~~Whether `HabitAtRiskJob` and `TaskDueReminderJob` sharing the same `20:00` cron is intentional or accidental is unresolved~~ — resolved: `TaskDueReminderJob` now runs at `18:00`, `HabitAtRiskJob` at `20:00`. Two distinct times, decided deliberately rather than left as an accidental copy.
+- No test for `NotificationController` or `PushServiceConfig` — same precedent as every controller and `@Configuration` bean-wiring class in the project; thin, delegates, not business logic.
+- Push-only, no in-app/email fallback if the browser subscription is stale or push is unsupported — not evaluated yet, no evidence it's a real gap.
 
 ---
 

@@ -1,11 +1,7 @@
 package com.jet.align.habit.impl;
 
 import com.jet.align.common.exception.ResourceNotFoundException;
-import com.jet.align.habit.Habit;
-import com.jet.align.habit.HabitCompletion;
-import com.jet.align.habit.HabitCompletionRepository;
-import com.jet.align.habit.HabitMapper;
-import com.jet.align.habit.HabitRepository;
+import com.jet.align.habit.*;
 import com.jet.align.habit.dto.HabitRequest;
 import com.jet.align.habit.dto.HabitResponse;
 import com.jet.align.user.User;
@@ -14,6 +10,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,21 +18,18 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class HabitServiceImplTest {
 
     private final HabitRepository habitRepository = mock(HabitRepository.class);
     private final HabitCompletionRepository habitCompletionRepository = mock(HabitCompletionRepository.class);
     private final HabitMapper mapper = mock(HabitMapper.class);
-    private final HabitServiceImpl service = new HabitServiceImpl(habitRepository, mapper, habitCompletionRepository);
+    private final HabitServiceImpl service = new HabitServiceImpl(habitRepository, mapper, habitCompletionRepository, "UTC");
     private final User user = new User();
 
-    private HabitResponse sampleResponse(UUID id, int currentStreak, int longestStreak) {
-        return new HabitResponse(id, "Meditar", currentStreak, longestStreak, Instant.now(), Instant.now());
+    private HabitResponse sampleResponse(UUID id, int currentStreak, int longestStreak, boolean completedToday) {
+        return new HabitResponse(id, "Meditar", currentStreak, longestStreak, completedToday, Instant.now(), Instant.now());
     }
 
     private HabitCompletion completionOn(LocalDate date) {
@@ -48,11 +42,11 @@ class HabitServiceImplTest {
     void al_crear_un_habito_el_streak_inicial_es_siempre_cero() {
         HabitRequest request = new HabitRequest("Meditar");
         Habit mapped = new Habit();
-        HabitResponse expected = sampleResponse(UUID.randomUUID(), 0, 0);
+        HabitResponse expected = sampleResponse(UUID.randomUUID(), 0, 0, false);
 
         when(mapper.toEntity(request)).thenReturn(mapped);
         when(habitRepository.save(mapped)).thenReturn(mapped);
-        when(mapper.toResponse(mapped, 0, 0)).thenReturn(expected);
+        when(mapper.toResponse(mapped, 0, 0, false)).thenReturn(expected);
 
         HabitResponse response = service.createHabit(user, request);
 
@@ -64,11 +58,11 @@ class HabitServiceImplTest {
     void getHabitById_devuelve_el_habito_mapeado_cuando_pertenece_al_usuario() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        HabitResponse expected = sampleResponse(id, 0, 0);
+        HabitResponse expected = sampleResponse(id, 0, 0, false);
 
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of());
-        when(mapper.toResponse(habit, 0, 0)).thenReturn(expected);
+        when(mapper.toResponse(habit, 0, 0, false)).thenReturn(expected);
 
         HabitResponse response = service.getHabitById(user, id);
 
@@ -88,16 +82,16 @@ class HabitServiceImplTest {
     void getHabits_devuelve_cada_habito_del_usuario_con_su_streak_calculado() {
         Habit habit1 = new Habit();
         Habit habit2 = new Habit();
-        HabitResponse response1 = sampleResponse(UUID.randomUUID(), 3, 3);
-        HabitResponse response2 = sampleResponse(UUID.randomUUID(), 0, 0);
-        LocalDate today = LocalDate.now();
+        HabitResponse response1 = sampleResponse(UUID.randomUUID(), 3, 3, true);
+        HabitResponse response2 = sampleResponse(UUID.randomUUID(), 0, 0, false);
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
 
         when(habitRepository.findByUserOrderByCreatedAtDesc(user)).thenReturn(List.of(habit1, habit2));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit1)).thenReturn(List.of(
                 completionOn(today), completionOn(today.minusDays(1)), completionOn(today.minusDays(2))));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit2)).thenReturn(List.of());
-        when(mapper.toResponse(habit1, 3, 3)).thenReturn(response1);
-        when(mapper.toResponse(habit2, 0, 0)).thenReturn(response2);
+        when(mapper.toResponse(habit1, 3, 3, true)).thenReturn(response1);
+        when(mapper.toResponse(habit2, 0, 0, false)).thenReturn(response2);
 
         List<HabitResponse> responses = service.getHabits(user);
 
@@ -109,14 +103,14 @@ class HabitServiceImplTest {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
         HabitRequest request = new HabitRequest("Meditar 10 minutos");
-        HabitResponse expected = sampleResponse(id, 2, 2);
-        LocalDate today = LocalDate.now();
+        HabitResponse expected = sampleResponse(id, 2, 2, true);
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
 
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitRepository.save(habit)).thenReturn(habit);
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
                 completionOn(today), completionOn(today.minusDays(1))));
-        when(mapper.toResponse(habit, 2, 2)).thenReturn(expected);
+        when(mapper.toResponse(habit, 2, 2, true)).thenReturn(expected);
 
         HabitResponse response = service.updateHabit(user, id, request);
 
@@ -168,12 +162,12 @@ class HabitServiceImplTest {
     void completeHabit_registra_una_nueva_completion_cuando_no_existe_una_para_hoy() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
 
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.existsByHabitAndDate(habit, today)).thenReturn(false);
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(completionOn(today)));
-        when(mapper.toResponse(habit, 1, 1)).thenReturn(sampleResponse(id, 1, 1));
+        when(mapper.toResponse(habit, 1, 1, true)).thenReturn(sampleResponse(id, 1, 1, true));
 
         service.completeHabit(user, id);
 
@@ -190,12 +184,12 @@ class HabitServiceImplTest {
     void completeHabit_es_idempotente_si_el_habito_ya_estaba_completado_hoy() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
 
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.existsByHabitAndDate(habit, today)).thenReturn(true);
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(completionOn(today)));
-        when(mapper.toResponse(habit, 1, 1)).thenReturn(sampleResponse(id, 1, 1));
+        when(mapper.toResponse(habit, 1, 1, true)).thenReturn(sampleResponse(id, 1, 1, true));
 
         HabitResponse response = service.completeHabit(user, id);
 
@@ -209,7 +203,7 @@ class HabitServiceImplTest {
         Habit habit = new Habit();
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of());
-        when(mapper.toResponse(habit, 0, 0)).thenReturn(sampleResponse(id, 0, 0));
+        when(mapper.toResponse(habit, 0, 0, false)).thenReturn(sampleResponse(id, 0, 0, false));
 
         HabitResponse response = service.getHabitById(user, id);
 
@@ -221,11 +215,11 @@ class HabitServiceImplTest {
     void streak_cuenta_dias_consecutivos_terminando_hoy() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
                 completionOn(today), completionOn(today.minusDays(1)), completionOn(today.minusDays(2))));
-        when(mapper.toResponse(habit, 3, 3)).thenReturn(sampleResponse(id, 3, 3));
+        when(mapper.toResponse(habit, 3, 3, true)).thenReturn(sampleResponse(id, 3, 3, true));
 
         HabitResponse response = service.getHabitById(user, id);
 
@@ -238,11 +232,11 @@ class HabitServiceImplTest {
     void streak_sigue_vivo_si_la_ultima_completion_fue_ayer() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
                 completionOn(today.minusDays(1)), completionOn(today.minusDays(2))));
-        when(mapper.toResponse(habit, 2, 2)).thenReturn(sampleResponse(id, 2, 2));
+        when(mapper.toResponse(habit, 2, 2, false)).thenReturn(sampleResponse(id, 2, 2, false));
 
         HabitResponse response = service.getHabitById(user, id);
 
@@ -256,11 +250,11 @@ class HabitServiceImplTest {
     void streak_se_resetea_a_cero_si_la_ultima_completion_fue_hace_mas_de_un_dia_pero_el_record_no_se_pierde() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
                 completionOn(today.minusDays(3))));
-        when(mapper.toResponse(habit, 0, 1)).thenReturn(sampleResponse(id, 0, 1));
+        when(mapper.toResponse(habit, 0, 1, false)).thenReturn(sampleResponse(id, 0, 1, false));
 
         HabitResponse response = service.getHabitById(user, id);
 
@@ -272,11 +266,11 @@ class HabitServiceImplTest {
     void streak_se_corta_en_el_primer_hueco_sin_seguir_contando_dias_anteriores() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
                 completionOn(today), completionOn(today.minusDays(1)), completionOn(today.minusDays(5))));
-        when(mapper.toResponse(habit, 2, 2)).thenReturn(sampleResponse(id, 2, 2));
+        when(mapper.toResponse(habit, 2, 2, true)).thenReturn(sampleResponse(id, 2, 2, true));
 
         HabitResponse response = service.getHabitById(user, id);
 
@@ -289,17 +283,65 @@ class HabitServiceImplTest {
     void longestStreak_puede_ser_mayor_que_la_racha_actual_por_una_racha_pasada_mas_larga() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
         when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
                 completionOn(today), completionOn(today.minusDays(1)),
                 completionOn(today.minusDays(10)), completionOn(today.minusDays(11)),
                 completionOn(today.minusDays(12)), completionOn(today.minusDays(13))));
-        when(mapper.toResponse(habit, 2, 4)).thenReturn(sampleResponse(id, 2, 4));
+        when(mapper.toResponse(habit, 2, 4, true)).thenReturn(sampleResponse(id, 2, 4, true));
 
         HabitResponse response = service.getHabitById(user, id);
 
         assertThat(response.currentStreak()).isEqualTo(2);
         assertThat(response.longestStreak()).isEqualTo(4);
+    }
+
+    @Test
+    void findHabitsAtRisk_incluye_habitos_no_completados_hoy_con_racha_activa() {
+        Habit habit = new Habit();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
+                completionOn(today.minusDays(1)), completionOn(today.minusDays(2))));
+
+        List<Habit> atRisk = service.findHabitsAtRisk();
+
+        assertThat(atRisk).containsExactly(habit);
+    }
+
+    @Test
+    void findHabitsAtRisk_excluye_habitos_ya_completados_hoy() {
+        Habit habit = new Habit();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
+                completionOn(today), completionOn(today.minusDays(1))));
+
+        List<Habit> atRisk = service.findHabitsAtRisk();
+
+        assertThat(atRisk).isEmpty();
+    }
+
+    @Test
+    void findHabitsAtRisk_excluye_habitos_sin_racha_activa() {
+        Habit habit = new Habit();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
+                completionOn(today.minusDays(5))));
+
+        List<Habit> atRisk = service.findHabitsAtRisk();
+
+        assertThat(atRisk).isEmpty();
+    }
+
+    @Test
+    void findHabitsAtRisk_devuelve_vacio_si_no_hay_habitos() {
+        when(habitRepository.findAll()).thenReturn(List.of());
+
+        List<Habit> atRisk = service.findHabitsAtRisk();
+
+        assertThat(atRisk).isEmpty();
     }
 }

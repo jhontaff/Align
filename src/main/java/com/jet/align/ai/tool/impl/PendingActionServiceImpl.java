@@ -7,21 +7,35 @@ import com.jet.align.ai.tool.*;
 import com.jet.align.common.exception.BusinessException;
 import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.user.User;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
-@RequiredArgsConstructor
 public class PendingActionServiceImpl implements PendingActionService {
 
     private final PendingActionRepository repository;
     private final ToolRegistry toolRegistry;
     private final ObjectMapper objectMapper;
+    private final int ttlHours;
+
+    public PendingActionServiceImpl (PendingActionRepository repository,
+                                     ToolRegistry toolRegistry,
+                                     ObjectMapper objectMapper,
+                                     @Value("${align.pending-action.ttl-hours}") int ttlHours) {
+        this.repository = repository;
+        this.toolRegistry = toolRegistry;
+        this.objectMapper = objectMapper;
+        this.ttlHours = ttlHours;
+    }
 
     @Override
     @Transactional
@@ -54,7 +68,6 @@ public class PendingActionServiceImpl implements PendingActionService {
         return repository.save(pendingAction);
     }
 
-
     private Map<String, Object> deserialize(String json) {
         try {
             return objectMapper.readValue(json, new TypeReference<>() {});
@@ -74,4 +87,28 @@ public class PendingActionServiceImpl implements PendingActionService {
         pending.setStatus(PendingActionStatus.REJECTED);
         repository.save(pending);
     }
+
+    @Override
+    @Transactional
+    public void expireStale(){
+        Instant cutoff = Instant.now().minus(ttlHours, ChronoUnit.HOURS);
+        List<PendingAction> stale = repository.findByStatusAndCreatedAtBefore(
+                PendingActionStatus.PENDING, cutoff);
+        for (PendingAction action : stale) {
+            action.setStatus(PendingActionStatus.EXPIRED);
+        }
+        repository.saveAll(stale);
+    }
+
+    @Override
+    public List<PendingActionResponse> list(User user) {
+        return repository.findByUserAndStatusOrderByCreatedAtDesc(user, PendingActionStatus.PENDING).stream()
+                .map(action -> new PendingActionResponse(
+                        action.getId(),
+                        action.getToolName(),
+                        deserialize(action.getArgumentsJson()),
+                        action.getCreatedAt()))
+                .toList();
+    }
+
 }
