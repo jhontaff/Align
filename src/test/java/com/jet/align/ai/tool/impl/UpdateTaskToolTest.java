@@ -1,5 +1,6 @@
 package com.jet.align.ai.tool.impl;
 
+import com.jet.align.ai.tool.RiskLevel;
 import com.jet.align.ai.tool.ToolContext;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -122,5 +123,16 @@ class UpdateTaskToolTest {
         assertThat(merged.priority()).isEqualTo(Priority.HIGH);
         assertThat(merged.dueDate()).isEqualTo(LocalDate.of(2026, 8, 10));
         assertThat(merged.dueTime()).isEqualTo(LocalTime.of(18, 30));
+    }
+
+    // update_task es SAFE, no DESTRUCTIVE: reconstruye el estado completo mergeando el
+    // patch contra el TaskResponse actual, así que un update equivocado deja la tarea
+    // existiendo y es corregible con otro update. El criterio de la Fase 3 es si el
+    // estado previo es reconstruible, no el verbo CRUD (por eso update_memory sí es
+    // DESTRUCTIVE: su content no tiene historial). Este test bloquea la regresión de
+    // marcarla DESTRUCTIVE, que metería cada edición por chat en el gate de PendingAction.
+    @Test
+    void update_task_es_una_tool_SAFE() {
+        assertThat(tool.risk()).isEqualTo(RiskLevel.SAFE);
     }
 }
