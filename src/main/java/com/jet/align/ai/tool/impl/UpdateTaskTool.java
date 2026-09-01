@@ -124,6 +124,6 @@ public class UpdateTaskTool implements Tool<TaskResponse> {
 
     @Override
     public RiskLevel risk() {
-        return RiskLevel.DESTRUCTIVE;
+        return RiskLevel.SAFE;
     }
 }
