@@ -18,8 +18,7 @@ public class PushSubscriptionServiceImpl implements PushSubscriptionService {
 
     public PushSubscriptionServiceImpl(
             PushSubscriptionRepository pushSubscriptionRepository,
-            @Value("${align.push.vapid.public-key}") String vapidPublicKey
-    ) {
+            @Value("${align.push.vapid.public-key}") String vapidPublicKey) {
         this.pushSubscriptionRepository = pushSubscriptionRepository;
         this.vapidPublicKey = vapidPublicKey;
     }
@@ -27,10 +26,10 @@ public class PushSubscriptionServiceImpl implements PushSubscriptionService {
     @Override
     @Transactional
     public void subscribe(User user, SubscribeRequest request) {
-        if (pushSubscriptionRepository.findByEndpoint(request.endpoint()).isPresent()) {
-            return;
-        }
-        PushSubscription subscription = new PushSubscription();
+        PushSubscription subscription = pushSubscriptionRepository
+                .findByEndpoint(request.endpoint())
+                .orElseGet(PushSubscription::new);
+
         subscription.setUser(user);
         subscription.setEndpoint(request.endpoint());
         subscription.setP256dh(request.keys().p256dh());

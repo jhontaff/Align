@@ -10,7 +10,6 @@ import org.mockito.ArgumentCaptor;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class PushSubscriptionServiceImplTest {
@@ -43,14 +42,40 @@ class PushSubscriptionServiceImplTest {
     }
 
     @Test
-    void subscribe_es_idempotente_si_el_endpoint_ya_existe() {
+    void subscribe_del_mismo_usuario_reusa_la_fila_existente_sin_crear_una_nueva() {
         SubscribeRequest request = requestFor("https://push.example/1");
-        when(repository.findByEndpoint(request.endpoint()))
-                .thenReturn(Optional.of(new PushSubscription()));
+        PushSubscription existing = new PushSubscription();
+        existing.setUser(user);
+        existing.setEndpoint(request.endpoint());
+        when(repository.findByEndpoint(request.endpoint())).thenReturn(Optional.of(existing));
 
         service.subscribe(user, request);
 
-        verify(repository, never()).save(any());
+        // Idempotente en efecto: guarda sobre la MISMA entidad, no una fila nueva.
+        ArgumentCaptor<PushSubscription> captor = ArgumentCaptor.forClass(PushSubscription.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue()).isSameAs(existing);
+        assertThat(captor.getValue().getUser()).isEqualTo(user);
+    }
+
+    @Test
+    void subscribe_reasigna_el_endpoint_cuando_pertenece_a_otro_usuario() {
+        SubscribeRequest request = requestFor("https://push.example/1");
+        User previousOwner = new User();
+        PushSubscription existing = new PushSubscription();
+        existing.setUser(previousOwner);
+        existing.setEndpoint(request.endpoint());
+        when(repository.findByEndpoint(request.endpoint())).thenReturn(Optional.of(existing));
+
+        service.subscribe(user, request);
+
+        ArgumentCaptor<PushSubscription> captor = ArgumentCaptor.forClass(PushSubscription.class);
+        verify(repository).save(captor.capture());
+        PushSubscription saved = captor.getValue();
+        assertThat(saved).isSameAs(existing);
+        assertThat(saved.getUser()).isEqualTo(user);
+        assertThat(saved.getP256dh()).isEqualTo(request.keys().p256dh());
+        assertThat(saved.getAuth()).isEqualTo(request.keys().auth());
     }
 
     @Test

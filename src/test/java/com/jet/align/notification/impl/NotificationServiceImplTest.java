@@ -52,7 +52,7 @@ class NotificationServiceImplTest {
     void notify_sin_suscripciones_no_llama_al_pushService() {
         when(repository.findByUser(user)).thenReturn(List.of());
 
-        service.notify(user, "Título", "Cuerpo");
+        service.notify(user, "Título", "Cuerpo", "/habits");
 
         verifyNoInteractions(pushService);
     }
@@ -63,7 +63,7 @@ class NotificationServiceImplTest {
         when(repository.findByUser(user)).thenReturn(List.of(subscription));
         when(pushService.send(any(Notification.class))).thenReturn(responseWithStatus(201));
 
-        service.notify(user, "Título", "Cuerpo");
+        service.notify(user, "Título", "Cuerpo", "/habits");
 
         verify(pushService).send(any(Notification.class));
         verify(repository, never()).delete(any());
@@ -75,7 +75,7 @@ class NotificationServiceImplTest {
         when(repository.findByUser(user)).thenReturn(List.of(subscription));
         when(pushService.send(any(Notification.class))).thenReturn(responseWithStatus(410));
 
-        service.notify(user, "Título", "Cuerpo");
+        service.notify(user, "Título", "Cuerpo", "/habits");
 
         verify(repository).delete(subscription);
     }
@@ -86,7 +86,7 @@ class NotificationServiceImplTest {
         when(repository.findByUser(user)).thenReturn(List.of(subscription));
         when(pushService.send(any(Notification.class))).thenReturn(responseWithStatus(404));
 
-        service.notify(user, "Título", "Cuerpo");
+        service.notify(user, "Título", "Cuerpo", "/habits");
 
         verify(repository).delete(subscription);
     }
@@ -97,7 +97,7 @@ class NotificationServiceImplTest {
         when(repository.findByUser(user)).thenReturn(List.of(subscription));
         when(pushService.send(any(Notification.class))).thenReturn(responseWithStatus(201));
 
-        service.notify(user, "Título", "Cuerpo");
+        service.notify(user, "Título", "Cuerpo", "/habits");
 
         verify(repository, never()).delete(any());
     }
@@ -111,7 +111,7 @@ class NotificationServiceImplTest {
                 .thenThrow(new RuntimeException("network error"))
                 .thenReturn(responseWithStatus(201));
 
-        service.notify(user, "Título", "Cuerpo");
+        service.notify(user, "Título", "Cuerpo", "/habits");
 
         verify(pushService, times(2)).send(any(Notification.class));
     }

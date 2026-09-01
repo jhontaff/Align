@@ -16,7 +16,7 @@ public class TaskDueReminderJob {
     public void run() {
         for (Task task : taskService.findTasksDueToday()) {
             notificationService.notify(task.getUser(), "Tarea vence hoy",
-                    "\"" + task.getTitle() + "\" vence hoy.");
+                    "\"" + task.getTitle() + "\" vence hoy.", "/tasks");
         }
     }
 }
