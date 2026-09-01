@@ -41,7 +41,7 @@ class TaskDueReminderJobTest {
 
         job.run();
 
-        verify(notificationService).notify(eq(user), anyString(), contains("Pagar la luz"));
+        verify(notificationService).notify(eq(user), anyString(), contains("Pagar la luz"), eq("/tasks"));
     }
 
     @Test
@@ -54,8 +54,8 @@ class TaskDueReminderJobTest {
 
         job.run();
 
-        verify(notificationService).notify(eq(firstUser), anyString(), contains("Pagar la luz"));
-        verify(notificationService).notify(eq(secondUser), anyString(), contains("Entregar informe"));
+        verify(notificationService).notify(eq(firstUser), anyString(), contains("Pagar la luz"), eq("/tasks"));
+        verify(notificationService).notify(eq(secondUser), anyString(), contains("Entregar informe"), eq("/tasks"));
         verifyNoMoreInteractions(notificationService);
     }
 }

@@ -41,7 +41,7 @@ class HabitAtRiskJobTest {
 
         job.run();
 
-        verify(notificationService).notify(eq(user), anyString(), contains("Leer"));
+        verify(notificationService).notify(eq(user), anyString(), contains("Leer"), eq("/habits"));
     }
 
     @Test
@@ -54,8 +54,8 @@ class HabitAtRiskJobTest {
 
         job.run();
 
-        verify(notificationService).notify(eq(firstUser), anyString(), contains("Leer"));
-        verify(notificationService).notify(eq(secondUser), anyString(), contains("Meditar"));
+        verify(notificationService).notify(eq(firstUser), anyString(), contains("Leer"), eq("/habits"));
+        verify(notificationService).notify(eq(secondUser), anyString(), contains("Meditar"), eq("/habits"));
         verifyNoMoreInteractions(notificationService);
     }
 }

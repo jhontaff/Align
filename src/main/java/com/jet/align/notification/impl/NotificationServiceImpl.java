@@ -31,8 +31,8 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional
-    public void notify(User user, String title, String body) {
-        String payload = buildPayload(title, body);
+    public void notify(User user, String title, String body, String url) {
+        String payload = buildPayload(title, body, url);
         for (PushSubscription subscription : pushSubscriptionRepository.findByUser(user)) {
             send(subscription, payload);
         }
@@ -44,8 +44,7 @@ public class NotificationServiceImpl implements NotificationService {
                     subscription.getEndpoint(),
                     subscription.getP256dh(),
                     subscription.getAuth(),
-                    payload
-            );
+                    payload);
             HttpResponse response = pushService.send(notification);
             int status = response.getStatusLine().getStatusCode();
             if (status == STATUS_NOT_FOUND || status == STATUS_GONE) {
@@ -57,9 +56,19 @@ public class NotificationServiceImpl implements NotificationService {
         }
     }
 
-    private String buildPayload(String title, String body) {
+    private String buildPayload(String title, String body, String url) {
         try {
-            return objectMapper.writeValueAsString(Map.of("title", title, "body", body));
+            Map<String, Object> notification = Map.of(
+                    "title", title,
+                    "body", body,
+                    "icon", "/icons/icon-192x192.png",
+                    "data", Map.of(
+                            "url", url,
+                            "onActionClick", Map.of(
+                                    "default", Map.of(
+                                            "operation", "focusLastFocusedOrOpen",
+                                            "url", url))));
+            return objectMapper.writeValueAsString(Map.of("notification", notification));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("No se pudo serializar el payload del push", e);
         }

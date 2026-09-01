@@ -12,11 +12,12 @@ import org.springframework.stereotype.Component;
 public class HabitAtRiskJob {
     private final HabitService habitService;
     private final NotificationService notificationService;
-    @Scheduled(cron = "0 0 20 * * *", zone = "${align.timezone}")
+
+    @Scheduled(cron = "0 07 22 * * *", zone = "${align.timezone}")
     public void run() {
         for (Habit habit : habitService.findHabitsAtRisk()) {
             notificationService.notify(habit.getUser(), "Tu racha está en riesgo",
-                    "No completaste \"" + habit.getName() + "\" hoy. ¡No pierdas tu racha!");
+                    "No completaste \"" + habit.getName() + "\" hoy. ¡No pierdas tu racha!", "/habits");
         }
     }
 }
