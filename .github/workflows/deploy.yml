@@ -1,0 +1,84 @@
+name: Deploy to production
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment: production
+
+    steps:
+      - name: Download jar from CI
+        uses: actions/download-artifact@v4
+        with:
+          name: align-jar
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./artifact
+
+      - name: Compute release name
+        id: rel
+        run: echo "name=align-${GITHUB_SHA::12}.jar" >> "$GITHUB_OUTPUT"
+
+      - name: Copy jar to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: ./artifact/align-0.0.1-SNAPSHOT.jar
+          target: /opt/align/releases/${{ steps.rel.outputs.name }}
+          strip_components: 1
+
+      - name: Activate and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            NEW=/opt/align/releases/${{ steps.rel.outputs.name }}
+            CURRENT=/opt/align/current.jar
+
+            # backup de BD antes de tocar nada (Flyway migrará al arrancar)
+            pg_dump -U align align_db | gzip > /opt/align/backups/pre-$(date +%F-%H%M%S).sql.gz
+
+            # guardar a qué apuntaba, para rollback
+            if [ -L "$CURRENT" ]; then
+              readlink -f "$CURRENT" > /opt/align/previous.txt
+            fi
+
+            # activar la nueva versión
+            ln -sfn "$NEW" "$CURRENT"
+            sudo systemctl restart align
+
+            # health check: hasta 60s esperando UP
+            for i in $(seq 1 12); do
+              if curl -fsS http://localhost:1010/actuator/health | grep -q '"status":"UP"'; then
+                echo "Health OK"
+                # limpiar releases viejos, dejar los últimos 5
+                ls -1t /opt/align/releases/align-*.jar | tail -n +6 | xargs -r rm -f
+                exit 0
+              fi
+              echo "Waiting for app... ($i/12)"
+              sleep 5
+            done
+
+            # falló: rollback
+            echo "Health check FAILED — rolling back"
+            if [ -s /opt/align/previous.txt ]; then
+              ln -sfn "$(cat /opt/align/previous.txt)" "$CURRENT"
+              sudo systemctl restart align
+            fi
+            exit 1

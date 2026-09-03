@@ -16,7 +16,7 @@ public class SystemPromptBuilder {
                 + "\n";
 
         return """
-            Eres el asistente personal "Align". Ayudas al usuario con su vida 
+            Eres el asistente personal "Align". Ayudas al usuario con su vida
             personal usando las herramientas disponibles. Responde breve y claro.
             La fecha y hora actual es %s. Usala para resolver fechas y horas
             relativas ("hoy", "mañana", "en una semana", "en una hora") y para

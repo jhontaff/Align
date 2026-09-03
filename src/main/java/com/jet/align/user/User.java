@@ -1,6 +1,5 @@
 package com.jet.align.user;
 
-import com.jet.align.ai.memory.ConversationHistory;
 import com.jet.align.common.model.BaseEntity;
 import com.jet.align.habit.Habit;
 import com.jet.align.task.Task;
@@ -31,7 +30,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder(toBuilder = true)
-public class User extends BaseEntity implements  UserDetails {
+public class User extends BaseEntity implements UserDetails {
 
     @Email
     @NotBlank
