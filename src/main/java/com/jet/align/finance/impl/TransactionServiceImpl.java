@@ -28,6 +28,7 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    @Transactional
     public TransactionResponse createTransaction(TransactionRequest request, User user) {
         Transaction  transaction = mapper.toTransaction(request);
         transaction.setType(request.category().getType());
@@ -36,6 +37,7 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    @Transactional
     public TransactionResponse getTransactionById(UUID id, User user) {
         Transaction  transaction = repository.findByIdAndUser(id, user).orElseThrow(
                 () -> new ResourceNotFoundException(TRANSACTION_NOT_FOUND_MESSAGE + id));
@@ -43,12 +45,14 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    @Transactional
     public Page<TransactionResponse> getTransactions(User user, Pageable pageable, TransactionFilter filter) {
         return repository.findAll(TransactionSpecifications.withFilter(user, filter), pageable)
                 .map(mapper::toResponse);
     }
 
     @Override
+    @Transactional
     public TransactionResponse updateTransaction(UUID id, TransactionUpdateRequest request, User user) {
         Transaction transaction = repository.findByIdAndUser(id, user).orElseThrow(
                 () -> new ResourceNotFoundException(TRANSACTION_NOT_FOUND_MESSAGE + id));
@@ -58,6 +62,7 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    @Transactional
     public void deleteTransaction(UUID id, User user) {
         Transaction transaction = repository.findByIdAndUser(id, user).orElseThrow(
                 () -> new ResourceNotFoundException(TRANSACTION_NOT_FOUND_MESSAGE + id));
@@ -65,6 +70,7 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    @Transactional
     public FinancialSummaryResponse getSummary(User user, TransactionFilter filter) {
         List<Transaction> transactions = repository.findAll(TransactionSpecifications.withFilter(user, filter));
         BigDecimal totalIncome = sum(transactions, TransactionType.INCOME);
