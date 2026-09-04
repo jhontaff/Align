@@ -538,6 +538,29 @@ Current coverage: `POST /api/agent/chat` (existing) and `GET /api/agent/history`
 - Done: test coverage in `AgentServiceImplTest` — the happy path (`UserMessage`/`AssistantMessage` → `ChatTurn` list) and the invariant-violation path (`ToolMessage` in history → `IllegalStateException`). Plain JUnit 5 unit tests using the existing `SpyConversationMemory` double, no Spring context, matching the rest of the AI layer's tests. No `AgentControllerTest` exists for either endpoint (`chat` was never tested at the controller layer either) — history is only tested at the service layer.
 - Known gap: `getHistory` returns the entire persisted history every time, no pagination or trimming — it inherits the "single serialized blob, not row-per-message" shape already noted in Conversation memory above. Revisit only if history grows large enough for that to matter.
 
+## Gemini API key pooling (`ai.llm.gemini`) — designed, not yet implemented
+
+Designed 2026-09-04, while planning the first production deploy. Problem framing agreed: `align.gemini.api-key` is a single global key today, but production is explicitly targeting real external users (not solo-operator use, confirmed during this design discussion) — once other people register, all their chat traffic hits the same key/quota, and if config ever moved to a paid tier, the operator would be billed for everyone's usage.
+
+Three options were compared: the user bringing their own key (BYOK — rejected, turns the app into a custodian of third-party secrets and adds real onboarding friction before someone can chat), eating the cost on a single global key with a self-imposed rate cap (rejected for now — doesn't solve the actual goal, which is "users don't pay"), and pooling several operator-owned free-tier keys behind a round-robin selector (**chosen**) — cheapest to build, no new secret-custody surface, and no `User`-level changes at all, since key selection is purely an `ai.llm.gemini`-internal concern; `LlmClient`'s neutral contract (`chat(LlmRequest)`) doesn't change, confirming the provider-isolation principle elsewhere in this file is doing its job.
+
+Key architectural finding that shapes the implementation: today's key is baked into the `RestClient` bean once at startup (`GeminiConfig.geminiRestClient`, `.defaultHeader("x-goog-api-key", ...)`) — a singleton, built once. Pooling requires the key to vary per call, so authentication has to move from a default header on the client to a per-request header set inside `GeminiLlmClient.chat()`.
+
+Decisions made:
+
+- **Round-robin with retry-on-429**, not blind round-robin. A key that comes back rate-limited mid-request falls through to the next key in the pool (bounded to pool size, to avoid an infinite loop) rather than surfacing `LlmUnavailableException` to that one unlucky user. Safe to retry because `generateContent` has no side effects.
+- **10 keys from 10 separate Google accounts**, not 10 keys under one Cloud project — chosen specifically to avoid the risk that Gemini's free-tier quota is enforced per-project rather than per-key, which would make pooling not actually multiply capacity.
+- **Never log a raw key value.** If observability around which key failed is added later, log the key's index in the pool (0–9), never the key itself.
+- **The pool is in-memory and scoped to a single JVM instance** (an `AtomicInteger` cursor inside a new `GeminiApiKeyPool` component — no Redis, no shared coordination). Deliberate, same guiding constraint against adopting infra without a concrete need that governs the rest of this roadmap, and consistent with the VPS decision (one always-on instance, no horizontal scaling) in [Production deployment](#production-deployment-mvp). **This becomes a real limitation the moment Align ever runs more than one instance behind a load balancer** — each instance would keep its own independent cursor, breaking the even-distribution assumption. Not a problem today; flagged so it's a known, deliberate trade-off rather than a surprise later.
+
+Planned implementation (not yet built):
+
+1. `GeminiProperties.apiKey: String` → `apiKeys: List<String>` (Spring Boot relaxed-binds a comma-separated env var into a list automatically, no custom parsing needed).
+2. New `GeminiApiKeyPool` (`ai.llm.gemini`, package-private like `GeminiApi`/`GeminiConfig`) — holds the key list plus an `AtomicInteger` cursor, one method `next()`, fails fast at construction if the list is empty rather than NPE-ing on the first chat request. Gets a unit test (pure round-robin logic, no Spring context) — the one genuinely new piece of logic in this change; `GeminiConfig`/`GeminiLlmClient` have no test precedent in this project and this doesn't change that.
+3. `GeminiConfig` — drop the `.defaultHeader(...)` call; the `RestClient` bean keeps only `baseUrl`.
+4. `GeminiLlmClient.chat()` — pull a key from the pool per call, set it as a per-request header; on catching a 429, retry with the pool's next key, bounded to pool size.
+5. `align.gemini.api-key` → `align.gemini.api-keys` in `application-dev.properties` and wherever prod secrets ultimately live — ties into the still-open "env vars/secrets for the systemd unit" item in [Production deployment](#production-deployment-mvp).
+
 ---
 
 # Code reviews
