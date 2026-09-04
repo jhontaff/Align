@@ -4,6 +4,7 @@ import com.jet.align.common.exception.BusinessException;
 import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.finance.*;
 import com.jet.align.finance.dto.*;
+import com.jet.align.finance.enums.Category;
 import com.jet.align.finance.enums.TransactionType;
 import com.jet.align.user.User;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,13 +14,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.   UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -97,6 +97,21 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     @Transactional
+    public CategoryBreakdownResponse getCategoryBreakdown(User user, LocalDate from, LocalDate to) {
+        LocalDate rangeFrom = from != null ? from : YearMonth.now(timezone).atDay(1);
+        LocalDate rangeTo = to != null ? to : YearMonth.now(timezone).atEndOfMonth();
+        if (rangeFrom.isAfter(rangeTo)) {
+            throw new BusinessException("The 'from' date cannot be after the 'to' date.");
+        }
+        TransactionFilter filter = new TransactionFilter(null, null, rangeFrom, rangeTo);
+        List<Transaction> transactions = repository.findAll(TransactionSpecifications.withFilter(user, filter));
+        List<CategoryAmount> incomes = breakdown(transactions, TransactionType.INCOME);
+        List<CategoryAmount> expenses = breakdown(transactions, TransactionType.EXPENSE);
+        return new CategoryBreakdownResponse(expenses, incomes);
+    }
+
+    @Override
+    @Transactional
     public MonthlySummaryResponse getMonthlySummary(User user, MonthlySummaryFilter filter) {
         YearMonth to = filter.to() != null ? filter.to() : YearMonth.now(timezone);
         YearMonth from = resolveMonth(filter, user, to);
@@ -119,6 +134,25 @@ public class TransactionServiceImpl implements TransactionService {
             months.add(new MonthlyPoint(cursor, income, expense, income.subtract(expense)));
         }
         return new MonthlySummaryResponse(months);
+    }
+
+    private List<CategoryAmount> breakdown(List<Transaction> transactions, TransactionType type) {
+        Map<Category, BigDecimal> byCategory = transactions.stream()
+                .filter(t -> t.getType() == type)
+                .collect(Collectors.groupingBy(
+                        Transaction::getCategory,
+                        Collectors.reducing(BigDecimal.ZERO, Transaction::getAmount, BigDecimal::add)));
+        BigDecimal total = byCategory.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return byCategory.entrySet().stream()
+                .map(e -> new CategoryAmount(e.getKey(), e.getValue(), percentageOf(e.getValue(), total)))
+                .sorted(Comparator.comparing(CategoryAmount::amount).reversed())
+                .toList();
+    }
+    private BigDecimal percentageOf(BigDecimal amount, BigDecimal total) {
+        if (total.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        return amount.multiply(BigDecimal.valueOf(100)).divide(total, 0, RoundingMode.HALF_UP);
     }
 
     private YearMonth resolveMonth(MonthlySummaryFilter filter, User user, YearMonth to) {
