@@ -1,10 +1,14 @@
 package com.jet.align.finance.impl;
 
+import com.jet.align.common.exception.BusinessException;
 import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.finance.Transaction;
 import com.jet.align.finance.TransactionMapper;
 import com.jet.align.finance.TransactionRepository;
 import com.jet.align.finance.dto.FinancialSummaryResponse;
+import com.jet.align.finance.dto.MonthlyPoint;
+import com.jet.align.finance.dto.MonthlySummaryFilter;
+import com.jet.align.finance.dto.MonthlySummaryResponse;
 import com.jet.align.finance.dto.TransactionFilter;
 import com.jet.align.finance.dto.TransactionRequest;
 import com.jet.align.finance.dto.TransactionResponse;
@@ -22,6 +26,8 @@ import org.springframework.data.jpa.domain.Specification;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,7 +45,7 @@ class TransactionServiceImplTest {
 
     private final TransactionRepository repository = mock(TransactionRepository.class);
     private final TransactionMapper mapper = mock(TransactionMapper.class);
-    private final TransactionServiceImpl service = new TransactionServiceImpl(repository, mapper);
+    private final TransactionServiceImpl service = new TransactionServiceImpl(repository, mapper, "UTC");
     private final User user = new User();
 
     private TransactionResponse sampleResponse(UUID id) {
@@ -184,5 +190,124 @@ class TransactionServiceImplTest {
         Page<TransactionResponse> response = service.getTransactions(user, pageable, filter);
 
         assertThat(response.getContent()).containsExactly(expected);
+    }
+
+    // getMonthlySummary: ventana adaptativa por defecto (sin from/to en el filtro)
+
+    @Test
+    void getMonthlySummary_usa_ventana_de_doce_meses_cuando_el_usuario_tiene_un_anio_de_historia() {
+        YearMonth to = YearMonth.now(ZoneId.of("UTC"));
+        YearMonth from = to.minusMonths(11);
+        Transaction firstTransaction = transactionOf(TransactionType.INCOME, BigDecimal.TEN);
+        firstTransaction.setDate(from.minusMonths(1).atDay(15)); // más vieja que la ventana de 12 meses
+        MonthlySummaryFilter filter = new MonthlySummaryFilter(null, null, null, null);
+
+        when(repository.findFirstByUserOrderByDateAsc(user)).thenReturn(Optional.of(firstTransaction));
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        MonthlySummaryResponse response = service.getMonthlySummary(user, filter);
+
+        assertThat(response.months()).hasSize(12);
+        assertThat(response.months().get(0).month()).isEqualTo(from);
+        assertThat(response.months().get(11).month()).isEqualTo(to);
+    }
+
+    @Test
+    void getMonthlySummary_usuario_nuevo_respeta_el_piso_minimo_de_tres_meses() {
+        YearMonth to = YearMonth.now(ZoneId.of("UTC"));
+        Transaction firstTransaction = transactionOf(TransactionType.EXPENSE, BigDecimal.ONE);
+        firstTransaction.setDate(to.atDay(5)); // se registró este mismo mes
+        MonthlySummaryFilter filter = new MonthlySummaryFilter(null, null, null, null);
+
+        when(repository.findFirstByUserOrderByDateAsc(user)).thenReturn(Optional.of(firstTransaction));
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        MonthlySummaryResponse response = service.getMonthlySummary(user, filter);
+
+        assertThat(response.months()).hasSize(3);
+        assertThat(response.months().get(0).month()).isEqualTo(to.minusMonths(2));
+        assertThat(response.months().get(2).month()).isEqualTo(to);
+    }
+
+    @Test
+    void getMonthlySummary_sin_transacciones_devuelve_piso_minimo_todo_en_cero() {
+        MonthlySummaryFilter filter = new MonthlySummaryFilter(null, null, null, null);
+        when(repository.findFirstByUserOrderByDateAsc(user)).thenReturn(Optional.empty());
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        MonthlySummaryResponse response = service.getMonthlySummary(user, filter);
+
+        assertThat(response.months()).hasSize(3);
+        assertThat(response.months()).allSatisfy(point -> {
+            assertThat(point.income()).isEqualByComparingTo(BigDecimal.ZERO);
+            assertThat(point.expense()).isEqualByComparingTo(BigDecimal.ZERO);
+            assertThat(point.balance()).isEqualByComparingTo(BigDecimal.ZERO);
+        });
+    }
+
+    // getMonthlySummary: rango explícito (from/to provistos por el caller)
+
+    @Test
+    void getMonthlySummary_con_from_explicito_no_consulta_la_primera_transaccion_del_usuario() {
+        YearMonth to = YearMonth.now(ZoneId.of("UTC"));
+        YearMonth from = to.minusMonths(2);
+        MonthlySummaryFilter filter = new MonthlySummaryFilter(from, to, null, null);
+
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        service.getMonthlySummary(user, filter);
+
+        verify(repository, never()).findFirstByUserOrderByDateAsc(any(User.class));
+    }
+
+    @Test
+    void getMonthlySummary_rellena_con_ceros_el_mes_sin_transacciones_en_medio_del_rango() {
+        YearMonth to = YearMonth.now(ZoneId.of("UTC"));
+        YearMonth from = to.minusMonths(2);
+        YearMonth gapMonth = from.plusMonths(1);
+        Transaction income = transactionOf(TransactionType.INCOME, BigDecimal.valueOf(500));
+        income.setDate(from.atDay(1));
+        Transaction expense = transactionOf(TransactionType.EXPENSE, BigDecimal.valueOf(200));
+        expense.setDate(to.atDay(1));
+        MonthlySummaryFilter filter = new MonthlySummaryFilter(from, to, null, null);
+
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of(income, expense));
+
+        MonthlySummaryResponse response = service.getMonthlySummary(user, filter);
+
+        assertThat(response.months()).hasSize(3);
+        MonthlyPoint gapPoint = response.months().stream()
+                .filter(p -> p.month().equals(gapMonth))
+                .findFirst().orElseThrow();
+        assertThat(gapPoint.income()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(gapPoint.expense()).isEqualByComparingTo(BigDecimal.ZERO);
+
+        MonthlyPoint fromPoint = response.months().get(0);
+        assertThat(fromPoint.income()).isEqualByComparingTo("500");
+        assertThat(fromPoint.balance()).isEqualByComparingTo("500");
+
+        MonthlyPoint toPoint = response.months().get(2);
+        assertThat(toPoint.expense()).isEqualByComparingTo("200");
+        assertThat(toPoint.balance()).isEqualByComparingTo("-200");
+    }
+
+    @Test
+    void getMonthlySummary_lanza_BusinessException_si_from_es_posterior_a_to() {
+        YearMonth to = YearMonth.now(ZoneId.of("UTC"));
+        MonthlySummaryFilter filter = new MonthlySummaryFilter(to.plusMonths(1), to, null, null);
+
+        assertThatThrownBy(() -> service.getMonthlySummary(user, filter))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void getMonthlySummary_lanza_BusinessException_si_el_rango_excede_el_maximo_permitido() {
+        YearMonth to = YearMonth.now(ZoneId.of("UTC"));
+        YearMonth from = to.minusMonths(36); // MAX_SPAN_MONTHS = 36, límite exclusivo
+        MonthlySummaryFilter filter = new MonthlySummaryFilter(from, to, null, null);
+
+        assertThatThrownBy(() -> service.getMonthlySummary(user, filter))
+                .isInstanceOf(BusinessException.class);
+        verify(repository, never()).findAll(any(Specification.class));
     }
 }

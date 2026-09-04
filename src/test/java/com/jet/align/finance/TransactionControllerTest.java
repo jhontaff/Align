@@ -2,6 +2,9 @@ package com.jet.align.finance;
 
 import com.jet.align.common.response.ApiResponse;
 import com.jet.align.finance.dto.FinancialSummaryResponse;
+import com.jet.align.finance.dto.MonthlyPoint;
+import com.jet.align.finance.dto.MonthlySummaryFilter;
+import com.jet.align.finance.dto.MonthlySummaryResponse;
 import com.jet.align.finance.dto.TransactionFilter;
 import com.jet.align.finance.dto.TransactionRequest;
 import com.jet.align.finance.dto.TransactionResponse;
@@ -20,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 
@@ -116,6 +120,21 @@ class TransactionControllerTest {
 
         ResponseEntity<ApiResponse<FinancialSummaryResponse>> response =
                 controller.getTransactionSummary(user, filter);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().data()).isEqualTo(expected);
+    }
+
+    @Test
+    void getMonthlySummary_devuelve_200_con_la_serie_mensual_del_service() {
+        MonthlySummaryFilter filter = new MonthlySummaryFilter(null, null, null, null);
+        MonthlySummaryResponse expected = new MonthlySummaryResponse(List.of(
+                new MonthlyPoint(YearMonth.of(2026, 8), BigDecimal.valueOf(300), BigDecimal.valueOf(150), BigDecimal.valueOf(150))
+        ));
+        when(transactionService.getMonthlySummary(user, filter)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<MonthlySummaryResponse>> response =
+                controller.getMonthlySummary(user, filter);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().data()).isEqualTo(expected);
