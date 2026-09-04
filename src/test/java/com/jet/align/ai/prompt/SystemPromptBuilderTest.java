@@ -29,6 +29,16 @@ class SystemPromptBuilderTest {
                 .contains("- Vive en Lima");
     }
 
+    @Test
+    void el_prompt_instruye_ordenar_eventos_tareas_y_habitos_cronologicamente_sin_inventar_horas() {
+        String prompt = SystemPromptBuilder.build(new UserContext(LocalDateTime.of(2026, 8, 2, 14, 35), List.of()));
+
+        assertThat(prompt)
+                .contains("ordenados cronológicamente")
+                .contains("No inventes horas");
+    }
+
+
     // El bloque de memorias no debería aparecer si el usuario todavía no tiene
     // ninguna guardada -- mostrar un encabezado seguido de nada sería ruido, no
     // contexto útil para el LLM.

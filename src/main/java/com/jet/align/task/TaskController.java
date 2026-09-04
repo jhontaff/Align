@@ -1,6 +1,7 @@
 package com.jet.align.task;
 
 import com.jet.align.common.response.ApiResponse;
+import com.jet.align.task.dto.TaskFilter;
 import com.jet.align.task.enums.TaskStatus;
 import com.jet.align.task.dto.TaskRequest;
 import com.jet.align.task.dto.TaskResponse;
@@ -52,26 +53,13 @@ public class TaskController {
     @GetMapping
     public ResponseEntity<ApiResponse<Page<TaskResponse>>> getTasks(
             @AuthenticationPrincipal User user,
-            @RequestParam(required = false) TaskStatus status,
-            @PageableDefault(
-                    size = 20,
-                    sort = "createdAt",
-                    direction = Sort.Direction.DESC
-            )
-            Pageable pageable
-
-    ){
-        Page<TaskResponse> response =
-                taskService.getTasks(user, pageable, status);
-
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                        HttpStatus.OK,
-                        "Tasks retrieved successfully.",
-                        response
-                )
-        );
+            @ModelAttribute TaskFilter filter,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        Page<TaskResponse> response = taskService.getTasks(user, pageable, filter);
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK, "Tasks retrieved successfully.", response));
     }
+
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<TaskResponse>> updateTask(

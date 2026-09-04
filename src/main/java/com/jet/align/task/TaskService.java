@@ -1,5 +1,6 @@
 package com.jet.align.task;
 
+import com.jet.align.task.dto.TaskFilter;
 import com.jet.align.task.enums.TaskStatus;
 import com.jet.align.task.dto.TaskRequest;
 import com.jet.align.task.dto.TaskResponse;
@@ -20,6 +21,6 @@ public interface TaskService {
             User user
     );
     public void deleteTask(UUID id, User user);
-    public Page<TaskResponse> getTasks(User user, Pageable pageable, TaskStatus status);
+    Page<TaskResponse> getTasks(User user, Pageable pageable, TaskFilter filter);
     List<Task> findTasksDueToday();
 }

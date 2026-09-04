@@ -5,6 +5,7 @@ import com.jet.align.user.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -13,14 +14,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface TaskRepository extends JpaRepository<Task, UUID> {
+public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificationExecutor<Task> {
     Optional<Task> findByIdAndUser(UUID id, User user);
-    Page<Task> findAllByUser(User user, Pageable pageable);
-    Page<Task> findAllByUserAndStatus(
-            User user,
-            TaskStatus status,
-            Pageable pageable
-    );
-
     List<Task> findAllByDueDateAndStatusNot(LocalDate dueDate, TaskStatus status);
 }
+

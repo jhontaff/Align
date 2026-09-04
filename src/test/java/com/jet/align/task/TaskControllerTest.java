@@ -1,6 +1,7 @@
 package com.jet.align.task;
 
 import com.jet.align.common.response.ApiResponse;
+import com.jet.align.task.dto.TaskFilter;
 import com.jet.align.task.dto.TaskRequest;
 import com.jet.align.task.dto.TaskResponse;
 import com.jet.align.task.dto.TaskUpdateRequest;
@@ -65,13 +66,14 @@ class TaskControllerTest {
     }
 
     @Test
-    void getTasks_pasa_el_status_y_el_pageable_tal_cual_al_service() {
+    void getTasks_pasa_el_filtro_y_el_pageable_tal_cual_al_service() {
         Pageable pageable = PageRequest.of(0, 20);
+        TaskFilter filter = new TaskFilter(TaskStatus.PENDING, null, null);
         Page<TaskResponse> expected = new PageImpl<>(List.of(sampleResponse(UUID.randomUUID(), TaskStatus.PENDING)));
-        when(taskService.getTasks(user, pageable, TaskStatus.PENDING)).thenReturn(expected);
+        when(taskService.getTasks(user, pageable, filter)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<Page<TaskResponse>>> response =
-                controller.getTasks(user, TaskStatus.PENDING, pageable);
+                controller.getTasks(user, filter, pageable);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().data()).isEqualTo(expected);

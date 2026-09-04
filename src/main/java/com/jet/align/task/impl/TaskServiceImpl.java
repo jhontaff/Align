@@ -1,10 +1,8 @@
 package com.jet.align.task.impl;
 
 import com.jet.align.common.exception.ResourceNotFoundException;
-import com.jet.align.task.Task;
-import com.jet.align.task.TaskMapper;
-import com.jet.align.task.TaskRepository;
-import com.jet.align.task.TaskService;
+import com.jet.align.task.*;
+import com.jet.align.task.dto.TaskFilter;
 import com.jet.align.task.dto.TaskRequest;
 import com.jet.align.task.dto.TaskResponse;
 import com.jet.align.task.dto.TaskUpdateRequest;
@@ -36,7 +34,7 @@ public class TaskServiceImpl implements TaskService {
         this.mapper = mapper;
         this.timezone = ZoneId.of(timezone);
     }
-
+    @Override
     @Transactional
     public TaskResponse createTask(
             TaskRequest request,
@@ -49,26 +47,21 @@ public class TaskServiceImpl implements TaskService {
         return mapper.toResponse(repository.save(task));
     }
 
+    @Override
     @Transactional(readOnly = true)
     public TaskResponse getTaskById (UUID id, User user) {
         Task task = repository.findByIdAndUser(id, user).orElseThrow(() -> new ResourceNotFoundException(TASK_NOT_FOUND_MESSAGE + id));
         return mapper.toResponse(task);
     }
 
+    @Override
     @Transactional(readOnly = true)
-    public Page<TaskResponse> getTasks(User user, Pageable pageable, TaskStatus status) {
-
-        Page<Task> tasks;
-
-        if (status == null) {
-            tasks = repository.findAllByUser(user, pageable);
-        } else {
-            tasks = repository.findAllByUserAndStatus(user, status, pageable);
-        }
-
-        return tasks.map(mapper::toResponse);
+    public Page<TaskResponse> getTasks(User user, Pageable pageable, TaskFilter filter) {
+        return repository.findAll(TaskSpecifications.withFilter(user, filter), pageable)
+                .map(mapper::toResponse);
     }
 
+    @Override
     @Transactional
     public TaskResponse updateTask(
             UUID id,
@@ -87,6 +80,7 @@ public class TaskServiceImpl implements TaskService {
         return mapper.toResponse(updatedTask);
     }
 
+    @Override
     @Transactional
     public void deleteTask(UUID id, User user) {
         Task task = repository.findByIdAndUser(id, user)
