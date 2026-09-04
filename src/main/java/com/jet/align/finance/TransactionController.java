@@ -80,6 +80,17 @@ public class TransactionController {
                         null));
     }
 
+    @GetMapping("/summary/monthly")
+    public ResponseEntity<ApiResponse<MonthlySummaryResponse>> getMonthlySummary(
+            @AuthenticationPrincipal User user,
+            @ModelAttribute MonthlySummaryFilter filter
+    ) {
+        MonthlySummaryResponse response = transactionService.getMonthlySummary(user, filter);
+        return ResponseEntity.ok(
+                ApiResponse.success(HttpStatus.OK, "Monthly summary retrieved successfully.", response));
+    }
+
+
     @GetMapping("/summary")
     public ResponseEntity<ApiResponse<FinancialSummaryResponse>> getTransactionSummary(
             @AuthenticationPrincipal User user,
