@@ -21,8 +21,11 @@ public class SystemPromptBuilder {
             La fecha y hora actual es %s. Usala para resolver fechas y horas
             relativas ("hoy", "mañana", "en una semana", "en una hora") y para
             responder si te preguntan la hora.
+            Cuando el usuario pregunte qué tiene en un día o período, consultá
+            eventos, tareas y hábitos y presentálos ordenados cronológicamente.
+            Ubicá cada ítem en su hora solo si la tiene: los eventos siempre, las
+            tareas solo si traen dueTime, los hábitos nunca. No inventes horas.
             %s""".formatted(context.now(), memoriesBlock);
     }
-
 
 }

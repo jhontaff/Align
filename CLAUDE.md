@@ -132,7 +132,7 @@ Domain roadmap decided while designing Habit: **Project is next** — it will be
 
 **Paused 2026-08-24**: this Project/Goal/Note domain roadmap is on hold, not cancelled — the reasoning above stays valid for whenever domain work resumes. Current priority shifted to evolving Align into a real personal assistant on top of the existing domains instead of adding new ones; see [Personal assistant roadmap](#personal-assistant-roadmap) below.
 
-**2026-09-02**: a new domain, **Calendar** (timed events + AI tools), is designed and queued for implementation — see [Calendar domain](#calendar-domain-calendar--planned-implementation-guide) below. It's not a return to the paused domain roadmap: it's the concrete backing for the assistant's time-awareness (agenda, reminders), reusing the Phase 3 confirmation gate and the Phase 5–6 scheduler/notification stack.
+**2026-09-02, built 2026-09-04**: a new domain, **Calendar** (timed events + AI tools), is complete — see [Calendar domain](#calendar-domain-calendar--complete-rest-ai-tools) below. It's not a return to the paused domain roadmap: it's the concrete backing for the assistant's time-awareness (agenda, reminders), reusing the Phase 3 confirmation gate and the Phase 5–6 scheduler/notification stack.
 
 ---
 
@@ -210,123 +210,40 @@ No next step defined for this domain — it's at parity with Task and Finance ac
 
 ---
 
-# Calendar domain (`calendar`) — planned (implementation guide)
+# Calendar domain (`calendar`) — complete (REST + AI tools)
 
-Decided 2026-09-02. A new business domain for a first-party calendar of **timed events** (start/end datetime, location, one optional reminder). **Not** Phase 7's "external calendar integration" — Google/Outlook/Apple/iCal sync, invitees, RRULE recurrence, and smart planning are all explicitly out of scope for this MVP. It is structured exactly like `habit`/`finance` (entity → REST → AI tools), reuses the Phase 3 confirmation gate for `delete_event`, and reuses the Phase 5–6 scheduler/notification stack for reminders. Status: **designed, not yet implemented** — this section is the runbook.
+Entity, migration, DTOs, repository, mapper, service, controller, AI tools, reminder job, and tests are all implemented and tested — the same level of completeness as Task/Finance/Habit. Designed 2026-09-02, built and verified end-to-end 2026-09-04. A first-party calendar of **timed events** (start/end datetime, location, one optional reminder). **Not** Phase 7's "external calendar integration" — Google/Outlook/Apple/iCal sync, invitees, RRULE recurrence, and smart planning are all explicitly out of scope for this MVP. Structured exactly like `habit`/`finance` (entity → REST → AI tools), reuses the Phase 3 confirmation gate for `delete_event`, and reuses the Phase 5–6 scheduler/notification stack for reminders — with one genuinely new piece of infrastructure (the reminder job's polling cadence, below).
 
-## Decisions locked (with the user, during design)
+Decisions locked during design, all held through implementation:
 
 - **`LocalDateTime` end-to-end** for `startAt`/`endAt`/`reminderAt` — entity, DTOs, and tool boundary all use `LocalDateTime`; columns are `TIMESTAMP` (no zone). Deliberate deviation from the "every table since `V2` uses `timestamptz`" convention (see `V12`): Align is single-timezone (`align.timezone`), the LLM and REST clients think in wall-clock, and the range math / reminder comparisons are all `LocalDateTime.now(timezone)`. `created_at`/`updated_at` still follow `BaseEntity` (`timestamptz`). Trade-off accepted: stored values become ambiguous if `align.timezone` ever changes — revisit only then.
-- **One `EventRequest` for both create and update** — same reasoning as `HabitRequest` reuse: Event's create and update rules are identical (no status field, no create-only field). No `EventUpdateRequest`. Revisit if the two ever diverge.
-- **Derived queries, not `Specification`, in `EventRepository`** — the list filter is two bounds on one field (`startAt >= from`, `startAt < to`), under the "more than one or two optional filter dimensions" threshold that pushed Finance to `Specification`. This is the Task situation, not the Finance situation.
-- **Reminder job polls every minute** (`@Scheduled(cron = "0 * * * * *", zone = "${align.timezone}")`) — a new job in `scheduler`, same mechanism as `TaskDueReminderJob`/`HabitAtRiskJob` but a finer tick, because a calendar reminder fires at an arbitrary instant (`startAt − reminderMinutesBefore`), not at a fixed daily wall-clock time. This is the one piece of genuinely new infrastructure: `NotificationService.notify` is reused as-is, but nothing today fires at a per-row timestamp.
-- **Tasks appear in the unified "¿qué tengo mañana?" view by hour**, using `Task.dueTime` (which already exists — `V5`, contra the stale note elsewhere that "Tasks have date but no time"). This needs **zero new modeling** — `TaskResponse` already carries `dueDate`/`dueTime`; the agent composes the timeline from the three `list_*` tool results. The rule: events always placed at `startAt`; tasks placed at `dueTime` only when present, else all-day; habits never timed. "Never invent an hour" still holds — only real `dueTime` is used.
-- **The unified view is pure agent composition** — `calendar` never depends on `TaskRepository`/`HabitRepository`; no backend aggregator. Per spec §10 and the "domains communicate through services" principle. The only backend change it needs is a date filter on `list_tasks` (below), because `list_tasks` currently returns only the 20 most-recent-by-`createdAt` and a task due tomorrow may not be in that window.
+- **One `EventRequest` for both create and update** — same reasoning as `HabitRequest` reuse: Event's create and update rules are identical (no status field, no create-only field). No `EventUpdateRequest`.
+- **Derived queries, not `Specification`, in `EventRepository`** — the list filter is two bounds on one field (`startAt >= from`, `startAt < to`), under the "more than one or two optional filter dimensions" threshold that pushed Finance to `Specification`. This is the Task situation (pre-fix), not the Finance situation.
+- **Reminder job polls every minute** (`EventReminderJob`, `@Scheduled(cron = "0 * * * * *", zone = "${align.timezone}")`) — the one piece of genuinely new scheduler infrastructure this domain needed: `TaskDueReminderJob`/`HabitAtRiskJob` are daily digests fired at a fixed wall-clock time, but a calendar reminder fires at an arbitrary instant (`startAt − reminderMinutesBefore`). `NotificationService.notify` is reused as-is; only the polling cadence is new.
+- **Tasks appear in the unified "¿qué tengo mañana?" view by hour**, using `Task.dueTime` (which already existed — `V5`, contra the stale note elsewhere that "Tasks have date but no time"). Needed **zero new modeling** on the Task side — `TaskResponse` already carried `dueDate`/`dueTime`; the agent composes the timeline from the `list_events`/`list_tasks`/`list_habits` results. The rule: events always placed at `startAt`; tasks placed at `dueTime` only when present, else all-day; habits never timed.
+- **The unified view is pure agent composition** — `calendar` never depends on `TaskRepository`/`HabitRepository`; no backend aggregator, per the "domains communicate through services" principle. The one backend change it needed was a date filter on `list_tasks` (below).
 
-## Entity, migration, DTOs
+Implemented:
 
-```
-@Entity @Table(name = "calendar_events")  Event extends BaseEntity
-  @ManyToOne(LAZY, optional=false) @JoinColumn(name="user_id", nullable=false)  User user
-  @Column(nullable=false)  String title
-                           String description             // nullable
-  @Column(nullable=false)  LocalDateTime startAt
-                           LocalDateTime endAt             // nullable
-                           String location                // nullable, text only
-                           Integer reminderMinutesBefore  // nullable
-                           LocalDateTime reminderAt        // nullable — DERIVED, never from client/LLM
-  @Column(nullable=false)  boolean reminderSent            // starts false
-```
+- Done: `Event` entity (`user`, `title`, `description`, `startAt`, `endAt`, `location`, `reminderMinutesBefore`, plus the derived `reminderAt`/`reminderSent` — internal reminder-mechanism state, not in `EventResponse`, same as Task exposing nothing about `TaskDueReminderJob`) and migration `V13__add_calendar_events.sql`: `calendar_events` table, `start_at`/`end_at`/`reminder_at` as bare `TIMESTAMP`, `created_at`/`updated_at` as `timestamptz`, FK `fk_calendar_events_user` with `ON DELETE CASCADE`, index `(user_id, start_at)`, partial index `(reminder_at) WHERE reminder_at IS NOT NULL AND reminder_sent = FALSE`, and a `CHECK (end_at IS NULL OR end_at > start_at)` constraint mirroring `chk_transactions_amount_positive` in Finance — defense in depth alongside the service-level validation.
+- Done: DTOs (`EventRequest`, `EventResponse`, `EventFilter`) and `EventMapper` (MapStruct; `toEntity`/`updateEntity` leave `reminderAt`/`reminderSent` unmapped — the service computes them via `applyReminder`).
+- Done: `EventService`/`EventServiceImpl` — full CRUD plus `findDueReminders()`/`markReminderSent(UUID)` for the reminder job (neither takes a `User`, system-wide sweep like `expireStale()`). Class-level `@Transactional(readOnly = true)` with an explicit override on every write method. `create`/`update` validate `startAt != null` (defends the AI-tool path, which skips bean validation) and that `endAt` is after `startAt` (`BusinessException`, so `AgentServiceImpl.runTool` surfaces a clean message to the LLM instead of a generic failure). `applyReminder` recomputes `reminderAt` from `startAt`/`reminderMinutesBefore` and resets `reminderSent` whenever the computed value changes — so moving `startAt` or the lead time re-arms the reminder.
+  - **Two real bugs caught by `EventServiceImplTest` and fixed before merging** — worth flagging alongside the `@Transactional`-override and FK-cascade lessons already documented in [Domain module layout](#domain-module-layout), since both are the same class of "the build won't catch it" mistake: (1) `applyReminder`'s null-`reminderMinutesBefore` branch was missing a `return`, so it fell through and unboxed a `null` `Integer` — `NullPointerException` on every create/update without a reminder, caught by the very first test that exercised that path. (2) `markReminderSent` was missing its own `@Transactional` override on a `readOnly = true` class — invisible to a Mockito unit test (mocks don't enforce Postgres's read-only-transaction rule at all), would only have surfaced the first time the reminder job ran against a real database. Both fixed before the service test suite went green.
+- Done: `EventController` (`/api/calendar/events`), structural copy of `TransactionController` — `POST` → 201; `GET /{id}` → 200; `GET` (`@ModelAttribute EventFilter` + `@PageableDefault(size=20, sort="startAt", ASC)`) → 200 `Page<EventResponse>`; `PUT /{id}` → 200; `DELETE /{id}` → 200 `ApiResponse<Void>`. No `EventControllerTest` (deliberate — same precedent as every thin controller in the project).
+- Done: AI tools (`create_event`, `list_events`, `get_event`, `update_event`, `delete_event`) in `ai.tool.impl`. All `RiskLevel.SAFE` except `delete_event` (`DESTRUCTIVE` — mirrors `DeleteTaskTool` exactly, including the Phase 3 wording that tells the model to call the tool immediately and trust the system to pause it, confirmed working in a single round-trip during manual testing). `create_event` is the full-replace case, `list_events` the filter-DTO case (`convertValue(arguments, EventFilter.class)`), `get_event`/`delete_event` the single-id case, `update_event` the patch-record + merge case (`EventPatch`, `@JsonIgnoreProperties(ignoreUnknown = true)`, coalesced against `getById`'s current state) — same as `UpdateTaskTool`. The `PendingAction` gate handles `delete_event` with zero changes to `ToolExecutionServiceImpl`/`AgentServiceImpl`.
+- Done: `EventReminderJob` (`scheduler`) — loops `eventService.findDueReminders()`, calls `notificationService.notify(user, "Recordatorio", "\"" + title + "\" comienza a las " + <HH:mm>, "/calendar")`, then `eventService.markReminderSent(id)` **per event, inside the loop** (a failed push doesn't block the rest or cause re-sends). Message copy lives in the job, not the service — same Phase 6 split as `TaskDueReminderJob`/`HabitAtRiskJob`. Missed-runs-after-downtime is the same accepted gap as `PendingActionExpirationJob`, mitigated by `findDueReminders`' `startAt > now` filter.
+- Done: `list_tasks` date filter (Task domain change, its own commit) — `TaskRepository` migrated to `JpaSpecificationExecutor<Task>` + new `TaskSpecifications.withFilter(user, TaskFilter)`, replacing the derived `findAllByUser`/`findAllByUserAndStatus` (crossed the "second optional filter dimension" threshold, same rule that pushed Finance to `Specification`). New `TaskFilter(status, dueFrom, dueTo)`. `TaskController.getTasks` moved from `@RequestParam status` to `@ModelAttribute TaskFilter`. `ListTasksTool` schema gained `dueFrom`/`dueTo`. See [Task AI tools](#task-ai-tools-aitool) for the tool-level detail.
+- Done: `SystemPromptBuilder` line — added after manual E2E testing showed it was needed: on `align.gemini.model=gemini-3.5-flash-lite` the unified "¿qué tengo mañana?" view didn't reliably compose the cross-domain timeline without an explicit instruction, confirming the runbook's "test without touching the prompt first" gate actually mattered rather than being a foregone conclusion. Added one line to the template: *"Cuando el usuario pregunte qué tiene en un día o período, consultá eventos, tareas y hábitos y presentálos ordenados cronológicamente. Ubicá cada ítem en su hora solo si la tiene: los eventos siempre, las tareas solo si traen dueTime, los hábitos nunca. No inventes horas."*
+- Done: test coverage — `EventServiceImplTest` (create/update validation including the two bugs above, `applyReminder` recompute/clear/re-arm, `findDueReminders` window logic, not-found + ownership paths, `list`'s range-vs-unranged dispatch), 5 tool tests (arg conversion + delegation + explicit `risk()` assert; `UpdateEventTool`'s covers the merge behavior and `ResourceNotFoundException` propagation from `getById`), `EventReminderJobTest` (0/1/N due events, per-event `markReminderSent` — note: when multiple test events are never persisted, their `id` is `null` on both sides of a Mockito comparison since `Event.id` has no public setter to fake one, so the N-case verifies `markReminderSent(any())` called `times(N)` rather than asserting per-id), plus updated `TaskServiceImplTest`/`TaskControllerTest`/`ListTasksToolTest`/`SystemPromptBuilderTest` for the `list_tasks` filter and the prompt line. Plain JUnit 5 + Mockito + AssertJ, no Spring context — consistent with the rest of the project. Full suite after this domain: 164 tests, all green.
 
-`reminderAt` + `reminderSent` are internal reminder-mechanism state, **not** in `EventResponse` (same as Task exposing nothing about `TaskDueReminderJob`). Materializing `reminderAt` (instead of recomputing `startAt − minutesBefore` in the per-minute job) gives the job an index-friendly predicate and makes "keep the reminder consistent on update" a one-line recompute. `reminderSent` is the idempotency guard.
+No next step defined for this domain — it's at parity with Task, Finance, and Habit across the full stack.
 
-`V13__add_calendar_events.sql`: `start_at`/`end_at`/`reminder_at` as `TIMESTAMP` (no zone, deliberate — see decisions); `created_at`/`updated_at` as `TIMESTAMP WITH TIME ZONE NOT NULL`; `reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`; FK `fk_calendar_events_user REFERENCES users(id) ON DELETE CASCADE` (explicit, per the `V11` lesson); index `(user_id, start_at)` and a partial index `(reminder_at) WHERE reminder_at IS NOT NULL AND reminder_sent = FALSE`. Verify uppercase `V` prefix and `@Table` name == `CREATE TABLE` name.
-
-DTOs (`calendar/dto`): `EventRequest(title @NotBlank @Size(max=255), description @Size(max=2000), startAt @NotNull, endAt, location @Size(max=255), reminderMinutesBefore @PositiveOrZero)`; `EventResponse(id, title, description, startAt, endAt, location, reminderMinutesBefore, createdAt, updatedAt)`; `EventFilter(LocalDateTime from, LocalDateTime to)`.
-
-`EventMapper` (MapStruct): `toEntity`/`updateEntity` ignore `user`, `reminderAt`, `reminderSent`; `toResponse` is 1:1.
-
-## Service contract & rules
-
-```java
-EventResponse create(User user, EventRequest r);
-EventResponse getById(User user, UUID id);
-Page<EventResponse> list(User user, EventFilter filter, Pageable pageable);
-EventResponse update(User user, UUID id, EventRequest r);
-void delete(User user, UUID id);
-List<Event> findDueReminders();       // no User arg — system-wide sweep, like expireStale()
-void markReminderSent(UUID eventId);
-```
-
-- Class-level `@Transactional(readOnly = true)`; explicit `@Transactional` override on `create`, `update`, `delete`, `markReminderSent` (the rule the project keeps re-learning).
-- Explicit constructor with `@Value("${align.timezone}") String timezone` → `ZoneId` (same idiom as `TaskServiceImpl`/`HabitServiceImpl`/`AgentServiceImpl`).
-- `getById`/`update`/`delete`: `findByIdAndUser(...).orElseThrow(() -> new ResourceNotFoundException("Event not found with id: " + id))`.
-- Validation in `create` + `update` before save: `if (endAt != null && !endAt.isAfter(startAt)) throw new BusinessException("endAt must be after startAt.")` — `BusinessException` because `AgentServiceImpl.runTool` special-cases it into a clean `{"error": ...}` tool message.
-- `applyReminder(Event)` — private, called in `create` (after `setUser`) and `update` (after `mapper.updateEntity`): if `reminderMinutesBefore == null` → `reminderAt = null`, `reminderSent = false`; else `next = startAt.minusMinutes(reminderMinutesBefore)`, and if `!next.equals(reminderAt)` set `reminderAt = next` and `reminderSent = false` (so moving `startAt` re-arms the reminder).
-- `findDueReminders()`: `repository.findByReminderSentFalseAndReminderAtLessThanEqual(now).stream().filter(e -> e.getStartAt().isAfter(now)).toList()` with `now = LocalDateTime.now(timezone)` — the `startAt > now` filter drops stale reminders after downtime.
-- `EventRepository` methods: `findByIdAndUser`, `findByUserOrderByStartAtAsc`, `findByUserAndStartAtGreaterThanEqualAndStartAtLessThanOrderByStartAtAsc`, `findByReminderSentFalseAndReminderAtLessThanEqual`. `list()` picks the ranged or unranged method; for a `from` with no `to` ("próximos eventos") pass a far-future `to`.
-
-## Controller
-
-`EventController` (`/api/calendar/events`), structural copy of `TransactionController`: `POST` → 201; `GET /{id}` → 200; `GET` (`@ModelAttribute EventFilter` + `@PageableDefault(size=20, sort="startAt", direction=ASC)`) → 200 `Page<EventResponse>`; `PUT /{id}` → 200; `DELETE /{id}` → 200 `ApiResponse<Void>`.
-
-## AI tools (`ai.tool.impl`)
-
-All `@Component` (auto-registered by `ToolRegistry`), all `RiskLevel.SAFE` except `delete_event`.
-
-| Tool | Type | risk | Arg parsing |
-|---|---|---|---|
-| `create_event` | `Tool<EventResponse>` | SAFE | `convertValue(arguments, EventRequest.class)` (full-replace) |
-| `list_events` | `Tool<List<EventResponse>>` | SAFE | `convertValue(arguments, EventFilter.class)`; fixed `Pageable` size 20 sort `startAt` ASC, not in schema; return `.getContent()` |
-| `get_event` | `Tool<EventResponse>` | SAFE | `UUID.fromString((String) args.get("eventId"))` |
-| `update_event` | `Tool<EventResponse>` | SAFE | patch-record + merge, exactly like `UpdateTaskTool`: `@JsonIgnoreProperties(ignoreUnknown=true) record EventPatch(...)`, read `eventId` separately, coalesce each field against `getById` current state, build full `EventRequest` |
-| `delete_event` | `Tool<Void>` | **DESTRUCTIVE** | `UUID.fromString(...)`; `ToolResult<>(null, "Event deleted successfully.")` |
-
-Schemas use `"format": "date-time"` for datetimes and `"additionalProperties": false`. `description()` must: tell `create_event`/`list_events` to resolve "mañana a las 3 PM" / "esta semana" against the current date-time already in the system prompt (no NL parser); tell `get_event`/`update_event`/`delete_event` to call `list_events` first if the id is unknown (same two-call flow as `update_task`); and give `delete_event` the exact Phase 3 wording — *"call the tool immediately, do not ask permission yourself, the system will pause it and require the user to confirm through the app"* — or the model negotiates in prose and never calls it (the real Phase 3 finding). The `PendingAction` gate handles `delete_event` with **zero** changes to `ToolExecutionServiceImpl`/`AgentServiceImpl`.
-
-## Reminder job (`scheduler`)
-
-`EventReminderJob` — `@Scheduled(cron = "0 * * * * *", zone = "${align.timezone}")`, loops `eventService.findDueReminders()`, calls `notificationService.notify(e.getUser(), "Recordatorio", "\"" + title + "\" comienza a las " + <HH:mm>, "/calendar")`, then `eventService.markReminderSent(e.getId())` per event (inside the loop — a failed push doesn't block the rest or cause re-sends). Message copy lives in the job, not the service (the Phase 6 split: service = "which rows qualify", job = "what it says"). `@EnableScheduling` is already on `AlignApplication`. Missed-runs-after-downtime is the same accepted gap as `PendingActionExpirationJob`, mitigated by the `startAt > now` filter.
-
-## `list_tasks` date filter (Task domain change — do as its own step)
-
-Additive refactor so the unified view is reliable past 20 tasks. Crosses the "second optional filter dimension" threshold → migrate Task to `Specification` (mirrors Finance):
-
-- `TaskRepository extends JpaRepository<Task,UUID>, JpaSpecificationExecutor<Task>` — keep `findByIdAndUser` and `findAllByDueDateAndStatusNot` (used by `TaskDueReminderJob`); drop `findAllByUser` / `findAllByUserAndStatus`.
-- New `TaskFilter(TaskStatus status, LocalDate dueFrom, LocalDate dueTo)` and `TaskSpecifications.withFilter(user, filter)` (user equality + optional status + optional `dueDate >= dueFrom` + optional `dueDate <= dueTo`).
-- `TaskService.getTasks(User, Pageable, TaskFilter)`; impl → `repository.findAll(spec, pageable).map(mapper::toResponse)`.
-- `TaskController.getTasks`: `@RequestParam status` → `@ModelAttribute TaskFilter` (the CLAUDE.md rule: switch to `@ModelAttribute` once the filter has more than one or two fields).
-- `ListTasksTool`: schema gains `dueFrom`/`dueTo` (`"format": "date"`, optional) alongside `status`; `execute` → `convertValue(arguments, TaskFilter.class)`; `description()` notes the range is by due date and the LLM computes it from the current date.
-- Update `TaskServiceImplTest`, `TaskControllerTest`, `ListTasksToolTest` (all currently assert against `status`-only `getTasks`).
-
-## `SystemPromptBuilder` line (only if needed)
-
-Test the unified view **without** touching the prompt first — Gemini usually composes the timeline correctly from the three tool results plus `dueDate`/`dueTime` in `TaskResponse`. Only if it's inconsistent, add one line to the template: *"Cuando el usuario pregunte qué tiene en un día o período, consultá eventos, tareas y hábitos y presentálos ordenados cronológicamente. Ubicá cada ítem en su hora solo si la tiene: los eventos siempre, las tareas solo si traen dueTime, los hábitos nunca. No inventes horas."* — and update `SystemPromptBuilderTest`.
-
-## Implementation order
-
-1. `Event` + `V13` + `EventRepository` → `ddl-auto=validate` passes on startup.
-2. DTOs + `EventMapper` → `mvn test-compile`.
-3. `EventService`/impl + `EventServiceImplTest` (create OK / `endAt <= startAt`; not-found + foreign-user; update re-arms `reminderAt` and resets `reminderSent`; `reminderMinutesBefore = null` clears `reminderAt`; `findDueReminders` includes due+future, excludes already-sent, excludes past `startAt`; delete not-found). Plain JUnit5 + Mockito + AssertJ, `new EventServiceImpl(repo, mapper, "UTC")`, no Spring.
-4. `EventController` (+ optional test like `TransactionControllerTest`).
-5. 5 tools + one test each (arg conversion + delegation + explicit `risk()` assert, style of `DeleteHabitToolTest`).
-6. `EventReminderJob` + `EventReminderJobTest` (0 / 1 / N due, style of `TaskDueReminderJobTest`, verify per-event `markReminderSent`).
-7. `list_tasks` date filter (own step, own commit — don't fold into the Calendar commit).
-8. `SystemPromptBuilder` line only if manual testing shows it's needed.
-9. Manual end-to-end via chat: the 5 DoD phrases plus "¿qué tengo mañana?" (verify tasks placed by `dueTime`, `delete_event` yields a `PendingAction` id in one round-trip).
-
-## Files
-
-- New: `calendar/` (`Event`, `EventController`, `EventService`(`Impl`), `EventRepository`, `EventMapper`, `dto/EventRequest`, `dto/EventResponse`, `dto/EventFilter`), `V13__add_calendar_events.sql`, 5 tools, `scheduler/EventReminderJob`, plus tests (`EventServiceImplTest`, 5 tool tests, `EventReminderJobTest`).
-- Modified (step 7 only): `TaskRepository`, `TaskService`, `TaskServiceImpl`, `TaskController`, `ListTasksTool` + new `TaskFilter`/`TaskSpecifications`; tests `TaskServiceImplTest`, `TaskControllerTest`, `ListTasksToolTest`.
-- Modified (step 8, conditional): `SystemPromptBuilder`, `SystemPromptBuilderTest`.
-- Untouched: `ai.agent`, `ai.tool` core, `PendingAction*`, `ToolExecutionServiceImpl`, `notification`, `habit`, `finance`.
-
-## Known gaps, deliberate for this MVP
+Known gaps, deliberate for this MVP:
 
 - No recurrence, no external-calendar sync, no invitees, no multiple reminders per event, no location beyond text, no planner — all explicitly out of scope.
-- `update_event`'s merge pattern means the LLM can't *clear* an optional field (set `endAt` back to null) — `null` means "leave unchanged". Same limitation as `update_task`; acceptable for the MVP.
+- `update_event`'s merge pattern means the LLM can't *clear* an optional field (set `endAt` back to null) — `null` means "leave unchanged". Same limitation as `update_task`.
 - Reminder job has no catch-up after downtime beyond firing late for still-upcoming events; same stance as every other `@Scheduled` job in the project.
+- No `EventControllerTest`, no dedicated `TaskSpecifications` test — same precedent as `TransactionSpecifications`/thin controllers elsewhere.
 
 ---
 
@@ -552,7 +469,7 @@ Current coverage: `create_task`, `update_task`, `list_tasks`, `delete_task`. `de
 
 `list_tasks` uses a fixed `Pageable` internally (size 20, sorted by `createdAt` DESC — same default as `TaskController.getTasks`), not exposed in its JSON schema. A chat request like "mostrame mis tareas pendientes" rarely needs explicit page/size control; add pagination parameters to the schema only if a real need to browse past the first page over chat shows up. It returns `List<TaskResponse>` (`Page#getContent()`), not the raw `Page`, so the LLM isn't handed pagination metadata (`pageable`, `totalElements`, etc.) it has no use for.
 
-Planned change (2026-09-02, part of the Calendar work — see [Calendar domain](#calendar-domain-calendar--planned-implementation-guide)): `list_tasks` gains an optional `dueFrom`/`dueTo` date filter so the agent can answer "¿qué tengo mañana?" reliably past the 20-row window. This crosses the second-optional-filter-dimension threshold and migrates `TaskRepository` to `JpaSpecificationExecutor` + a `TaskSpecifications` builder, mirroring Finance; `TaskController.getTasks` moves from `@RequestParam status` to `@ModelAttribute TaskFilter`.
+Done (2026-09-04, part of the Calendar work — see [Calendar domain](#calendar-domain-calendar--complete-rest-ai-tools)): `list_tasks` gained an optional `dueFrom`/`dueTo` date filter so the agent can answer "¿qué tengo mañana?" reliably past the 20-row window. This crossed the second-optional-filter-dimension threshold and migrated `TaskRepository` to `JpaSpecificationExecutor` + a new `TaskSpecifications` builder, mirroring Finance; `TaskController.getTasks` moved from `@RequestParam status` to `@ModelAttribute TaskFilter`; `ListTasksTool`'s schema gained `dueFrom`/`dueTo` alongside `status`.
 
 ## Finance AI tools (`ai.tool`)
 

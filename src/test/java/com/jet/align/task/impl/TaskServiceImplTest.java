@@ -4,6 +4,7 @@ import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.task.Task;
 import com.jet.align.task.TaskMapper;
 import com.jet.align.task.TaskRepository;
+import com.jet.align.task.dto.TaskFilter;
 import com.jet.align.task.dto.TaskRequest;
 import com.jet.align.task.dto.TaskResponse;
 import com.jet.align.task.dto.TaskUpdateRequest;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -26,6 +28,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -88,35 +91,43 @@ class TaskServiceImplTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
+    // A diferencia de un derived method, una Specification es un lambda: no hay
+    // forma de comparar dos instancias por igualdad de contenido, así que el mock
+    // se stubea con any(Specification.class) -- lo que se prueba acá es que
+    // getTasks delega en findAll(spec, pageable) y mapea cada resultado, no el
+    // detalle interno de qué predicados arma TaskSpecifications (eso es trivial y
+    // no tiene ramas condicionales que ameriten un test propio). Mismo enfoque que
+    // TransactionServiceImplTest.getTransactions_delega_en_el_repository_con_specification_y_pageable_y_mapea_cada_resultado.
     @Test
-    void getTasks_sin_status_delega_en_findAllByUser() {
+    void getTasks_sin_filtro_delega_en_findAll_con_specification_y_pageable() {
         Pageable pageable = PageRequest.of(0, 20);
         Task task = new Task();
         TaskResponse expected = sampleResponse(UUID.randomUUID(), TaskStatus.PENDING);
         Page<Task> page = new PageImpl<>(List.of(task));
 
-        when(repository.findAllByUser(user, pageable)).thenReturn(page);
+        when(repository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
         when(mapper.toResponse(task)).thenReturn(expected);
 
-        Page<TaskResponse> response = service.getTasks(user, pageable, null);
+        Page<TaskResponse> response = service.getTasks(user, pageable, new TaskFilter(null, null, null));
 
         assertThat(response.getContent()).containsExactly(expected);
     }
 
     @Test
-    void getTasks_con_status_delega_en_findAllByUserAndStatus() {
+    void getTasks_con_status_y_rango_de_fechas_tambien_delega_en_findAll_con_specification() {
         Pageable pageable = PageRequest.of(0, 20);
         Task task = new Task();
         TaskResponse expected = sampleResponse(UUID.randomUUID(), TaskStatus.COMPLETED);
         Page<Task> page = new PageImpl<>(List.of(task));
+        TaskFilter filter = new TaskFilter(
+                TaskStatus.COMPLETED, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
 
-        when(repository.findAllByUserAndStatus(user, TaskStatus.COMPLETED, pageable)).thenReturn(page);
+        when(repository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
         when(mapper.toResponse(task)).thenReturn(expected);
 
-        Page<TaskResponse> response = service.getTasks(user, pageable, TaskStatus.COMPLETED);
+        Page<TaskResponse> response = service.getTasks(user, pageable, filter);
 
         assertThat(response.getContent()).containsExactly(expected);
-        verify(repository, never()).findAllByUser(any(User.class), any(Pageable.class));
     }
 
     @Test
