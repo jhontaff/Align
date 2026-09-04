@@ -5,6 +5,8 @@ import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.finance.Transaction;
 import com.jet.align.finance.TransactionMapper;
 import com.jet.align.finance.TransactionRepository;
+import com.jet.align.finance.dto.CategoryAmount;
+import com.jet.align.finance.dto.CategoryBreakdownResponse;
 import com.jet.align.finance.dto.FinancialSummaryResponse;
 import com.jet.align.finance.dto.MonthlyPoint;
 import com.jet.align.finance.dto.MonthlySummaryFilter;
@@ -308,6 +310,87 @@ class TransactionServiceImplTest {
 
         assertThatThrownBy(() -> service.getMonthlySummary(user, filter))
                 .isInstanceOf(BusinessException.class);
+        verify(repository, never()).findAll(any(Specification.class));
+    }
+
+    // getCategoryBreakdown
+
+    @Test
+    void getCategoryBreakdown_agrupa_por_categoria_y_calcula_porcentaje_sobre_el_total_de_su_tipo() {
+        Transaction housing = transactionOf(TransactionType.EXPENSE, BigDecimal.valueOf(650));
+        housing.setCategory(Category.HOUSING);
+        Transaction shopping = transactionOf(TransactionType.EXPENSE, BigDecimal.valueOf(75));
+        shopping.setCategory(Category.SHOPPING);
+        Transaction salary = transactionOf(TransactionType.INCOME, BigDecimal.valueOf(1000));
+        salary.setCategory(Category.SALARY);
+
+        when(repository.findAll(any(Specification.class)))
+                .thenReturn(List.of(housing, shopping, salary));
+
+        CategoryBreakdownResponse response = service.getCategoryBreakdown(
+                user, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+
+        assertThat(response.expenses()).hasSize(2);
+        assertThat(response.expenses().get(0).category()).isEqualTo(Category.HOUSING);
+        assertThat(response.expenses().get(0).amount()).isEqualByComparingTo("650");
+        assertThat(response.expenses().get(0).percentage()).isEqualByComparingTo("90");
+        assertThat(response.expenses().get(1).category()).isEqualTo(Category.SHOPPING);
+        assertThat(response.expenses().get(1).percentage()).isEqualByComparingTo("10");
+
+        assertThat(response.incomes()).hasSize(1);
+        assertThat(response.incomes().get(0).category()).isEqualTo(Category.SALARY);
+        assertThat(response.incomes().get(0).percentage()).isEqualByComparingTo("100");
+    }
+
+    // Categorías sin transacciones en el rango no deben aparecer en el resultado
+    // con 0% — se omiten directamente, misma decisión documentada para este endpoint.
+    @Test
+    void getCategoryBreakdown_categoria_sin_transacciones_no_aparece_en_el_resultado() {
+        Transaction food = transactionOf(TransactionType.EXPENSE, BigDecimal.TEN);
+        food.setCategory(Category.FOOD);
+
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of(food));
+
+        CategoryBreakdownResponse response = service.getCategoryBreakdown(
+                user, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+
+        assertThat(response.expenses()).extracting(CategoryAmount::category).containsExactly(Category.FOOD);
+        assertThat(response.incomes()).isEmpty();
+    }
+
+    // Sin transacciones de un tipo en el rango, el total de ese tipo es cero:
+    // percentageOf debe devolver ZERO en vez de dividir por cero.
+    @Test
+    void getCategoryBreakdown_sin_transacciones_devuelve_ambas_listas_vacias() {
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        CategoryBreakdownResponse response = service.getCategoryBreakdown(
+                user, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+
+        assertThat(response.expenses()).isEmpty();
+        assertThat(response.incomes()).isEmpty();
+    }
+
+    // Sin from/to, el rango por defecto es el mes actual (rangeFrom <= rangeTo siempre
+    // se cumple con YearMonth.now()), así que no debe lanzar BusinessException por
+    // "from posterior a to" ni fallar al construir el TransactionFilter internamente.
+    @Test
+    void getCategoryBreakdown_sin_from_ni_to_no_lanza_excepcion_y_delega_en_el_repository() {
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        CategoryBreakdownResponse response = service.getCategoryBreakdown(user, null, null);
+
+        assertThat(response.expenses()).isEmpty();
+        assertThat(response.incomes()).isEmpty();
+        verify(repository).findAll(any(Specification.class));
+    }
+
+    @Test
+    void getCategoryBreakdown_lanza_BusinessException_si_from_es_posterior_a_to() {
+        assertThatThrownBy(() -> service.getCategoryBreakdown(
+                user, LocalDate.of(2026, 8, 10), LocalDate.of(2026, 8, 1)))
+                .isInstanceOf(BusinessException.class);
+
         verify(repository, never()).findAll(any(Specification.class));
     }
 }
