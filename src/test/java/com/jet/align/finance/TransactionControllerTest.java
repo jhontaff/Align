@@ -1,7 +1,10 @@
 package com.jet.align.finance;
 
 import com.jet.align.common.response.ApiResponse;
+import com.jet.align.finance.dto.DailyAmount;
 import com.jet.align.finance.dto.FinancialSummaryResponse;
+import com.jet.align.finance.dto.MonthlyChartResponse;
+import com.jet.align.finance.dto.MonthlySeries;
 import com.jet.align.finance.dto.TransactionFilter;
 import com.jet.align.finance.dto.TransactionRequest;
 import com.jet.align.finance.dto.TransactionResponse;
@@ -20,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 
@@ -116,6 +120,20 @@ class TransactionControllerTest {
 
         ResponseEntity<ApiResponse<FinancialSummaryResponse>> response =
                 controller.getTransactionSummary(user, filter);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().data()).isEqualTo(expected);
+    }
+
+    @Test
+    void getMonthlyChart_devuelve_200_con_la_data_del_service() {
+        MonthlyChartResponse expected = new MonthlyChartResponse(
+                new MonthlySeries(YearMonth.of(2026, 9),
+                        List.of(new DailyAmount(LocalDate.of(2026, 9, 1), BigDecimal.TEN, BigDecimal.ZERO))),
+                new MonthlySeries(YearMonth.of(2026, 8), List.of()));
+        when(transactionService.getMonthlyChart(user)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<MonthlyChartResponse>> response = controller.getMonthlyChart(user);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().data()).isEqualTo(expected);

@@ -538,7 +538,7 @@ Current coverage: `POST /api/agent/chat` (existing) and `GET /api/agent/history`
 - Done: test coverage in `AgentServiceImplTest` — the happy path (`UserMessage`/`AssistantMessage` → `ChatTurn` list) and the invariant-violation path (`ToolMessage` in history → `IllegalStateException`). Plain JUnit 5 unit tests using the existing `SpyConversationMemory` double, no Spring context, matching the rest of the AI layer's tests. No `AgentControllerTest` exists for either endpoint (`chat` was never tested at the controller layer either) — history is only tested at the service layer.
 - Known gap: `getHistory` returns the entire persisted history every time, no pagination or trimming — it inherits the "single serialized blob, not row-per-message" shape already noted in Conversation memory above. Revisit only if history grows large enough for that to matter.
 
-## Gemini API key pooling (`ai.llm.gemini`) — designed, not yet implemented
+## Gemini API key pooling (`ai.llm.gemini`) — implemented, pending real keys
 
 Designed 2026-09-04, while planning the first production deploy. Problem framing agreed: `align.gemini.api-key` is a single global key today, but production is explicitly targeting real external users (not solo-operator use, confirmed during this design discussion) — once other people register, all their chat traffic hits the same key/quota, and if config ever moved to a paid tier, the operator would be billed for everyone's usage.
 
@@ -553,13 +553,20 @@ Decisions made:
 - **Never log a raw key value.** If observability around which key failed is added later, log the key's index in the pool (0–9), never the key itself.
 - **The pool is in-memory and scoped to a single JVM instance** (an `AtomicInteger` cursor inside a new `GeminiApiKeyPool` component — no Redis, no shared coordination). Deliberate, same guiding constraint against adopting infra without a concrete need that governs the rest of this roadmap, and consistent with the VPS decision (one always-on instance, no horizontal scaling) in [Production deployment](#production-deployment-mvp). **This becomes a real limitation the moment Align ever runs more than one instance behind a load balancer** — each instance would keep its own independent cursor, breaking the even-distribution assumption. Not a problem today; flagged so it's a known, deliberate trade-off rather than a surprise later.
 
-Planned implementation (not yet built):
+Implemented, 2026-09-04 (code written by the user, guided step by step rather than generated):
 
-1. `GeminiProperties.apiKey: String` → `apiKeys: List<String>` (Spring Boot relaxed-binds a comma-separated env var into a list automatically, no custom parsing needed).
-2. New `GeminiApiKeyPool` (`ai.llm.gemini`, package-private like `GeminiApi`/`GeminiConfig`) — holds the key list plus an `AtomicInteger` cursor, one method `next()`, fails fast at construction if the list is empty rather than NPE-ing on the first chat request. Gets a unit test (pure round-robin logic, no Spring context) — the one genuinely new piece of logic in this change; `GeminiConfig`/`GeminiLlmClient` have no test precedent in this project and this doesn't change that.
-3. `GeminiConfig` — drop the `.defaultHeader(...)` call; the `RestClient` bean keeps only `baseUrl`.
-4. `GeminiLlmClient.chat()` — pull a key from the pool per call, set it as a per-request header; on catching a 429, retry with the pool's next key, bounded to pool size.
-5. `align.gemini.api-key` → `align.gemini.api-keys` in `application-dev.properties` and wherever prod secrets ultimately live — ties into the still-open "env vars/secrets for the systemd unit" item in [Production deployment](#production-deployment-mvp).
+- Done: `GeminiProperties.apiKey: String` → `apiKeys: List<String>`.
+- Done: `GeminiApiKeyPool` (`ai.llm.gemini`, package-private) — holds the key list plus an `AtomicInteger` cursor, `next()` does round-robin via `cursor.getAndUpdate(i -> (i + 1) % keys.size())`, constructor fails fast (`IllegalStateException`) if `apiKeys` is null/empty rather than NPE-ing on the first chat request.
+- Done: `GeminiConfig` — `.defaultHeader("x-goog-api-key", ...)` removed from the `RestClient` bean; the key can no longer be fixed at bean-construction time since it now varies per call.
+- Done: `GeminiLlmClient.chat()` — loops up to `keyPool.size()` attempts, pulling a fresh key from the pool each time and setting it as a per-request `.header(...)` (not a client default anymore). Only `HttpClientErrorException.TooManyRequests` (429) triggers a retry with the next key; `HttpServerErrorException` (5xx) still fails immediately into `LlmUnavailableException` as before, since a different key doesn't fix a Gemini-side outage. Exhausting the pool without success throws `LlmUnavailableException` with the last 429 as cause.
+- Done: `align.gemini.api-key` → `align.gemini.api-keys` renamed in `application-prod.properties` (`${GEMINI_API_KEYS:}`, still ties into the open "env vars/secrets for the systemd unit" item in [Production deployment](#production-deployment-mvp)) and `application-ci.properties` (`ci-dummy`, single-element list, satisfies the pool's non-empty check without needing 10 real keys for CI). `application-dev.properties` has the property commented out with the expected comma-separated shape — deliberately left absent (not a placeholder value) so the existing fail-fast still triggers clearly if the developer forgets to fill it in, rather than silently pooling over one blank/fake key.
+
+Known gaps, real and left open on purpose:
+
+- **The 10 real keys aren't generated yet** — the user's next step is creating 10 separate Google accounts/API keys (per the per-project-vs-per-key quota concern above) and filling in `application-dev.properties`, then whatever prod's secret store ends up being.
+- **No manual smoke test yet** — haven't confirmed end-to-end that the header rotates correctly across real calls or that a real 429 actually falls through to the next key. Do this once real keys exist, before considering the feature done.
+- **No `GeminiApiKeyPoolTest`** — flagged during design as the one piece of genuinely new logic that earns a unit test (pure round-robin, no Spring context needed), but not written yet.
+- **A known, accepted concurrency edge case**: the retry loop in `chat()` assumes calling `keyPool.next()` up to `keyPool.size()` times tries every key exactly once, which only holds if this call has exclusive access to the shared cursor. Under real concurrent traffic, another request's calls to `next()` interleave with this loop's, so a retry burst could occasionally hit the same key twice and never reach one that was actually free — meaning it could give up prematurely despite an untried key being available. Deliberately not fixed (would need tracking already-tried keys per call, e.g. a local `Set`, adding real complexity) — same YAGNI stance as the rest of this roadmap: it needs simultaneous heavy concurrent traffic *and* multiple simultaneous 429s to manifest at all, well beyond Align's current scale. Revisit only if it's ever observed in practice.
 
 ---
 

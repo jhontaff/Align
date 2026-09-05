@@ -4,7 +4,9 @@ import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.finance.Transaction;
 import com.jet.align.finance.TransactionMapper;
 import com.jet.align.finance.TransactionRepository;
+import com.jet.align.finance.dto.DailyAmount;
 import com.jet.align.finance.dto.FinancialSummaryResponse;
+import com.jet.align.finance.dto.MonthlyChartResponse;
 import com.jet.align.finance.dto.TransactionFilter;
 import com.jet.align.finance.dto.TransactionRequest;
 import com.jet.align.finance.dto.TransactionResponse;
@@ -22,6 +24,8 @@ import org.springframework.data.jpa.domain.Specification;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,7 +43,7 @@ class TransactionServiceImplTest {
 
     private final TransactionRepository repository = mock(TransactionRepository.class);
     private final TransactionMapper mapper = mock(TransactionMapper.class);
-    private final TransactionServiceImpl service = new TransactionServiceImpl(repository, mapper);
+    private final TransactionServiceImpl service = new TransactionServiceImpl(repository, mapper, "UTC");
     private final User user = new User();
 
     private TransactionResponse sampleResponse(UUID id) {
@@ -184,5 +188,62 @@ class TransactionServiceImplTest {
         Page<TransactionResponse> response = service.getTransactions(user, pageable, filter);
 
         assertThat(response.getContent()).containsExactly(expected);
+    }
+
+    @Test
+    void getMonthlyChart_agrupa_por_dia_y_separa_entre_mes_actual_y_anterior() {
+        YearMonth currentMonth = YearMonth.now(ZoneId.of("UTC"));
+        YearMonth previousMonth = currentMonth.minusMonths(1);
+        LocalDate currentDay = currentMonth.atDay(1);
+        LocalDate previousDay = previousMonth.atDay(1);
+
+        Transaction currentIncome = transactionOf(TransactionType.INCOME, BigDecimal.valueOf(100));
+        currentIncome.setDate(currentDay);
+        Transaction currentExpense = transactionOf(TransactionType.EXPENSE, BigDecimal.valueOf(40));
+        currentExpense.setDate(currentDay);
+        Transaction previousIncome = transactionOf(TransactionType.INCOME, BigDecimal.valueOf(200));
+        previousIncome.setDate(previousDay);
+
+        when(repository.findAll(any(Specification.class)))
+                .thenReturn(List.of(currentIncome, currentExpense, previousIncome));
+
+        MonthlyChartResponse response = service.getMonthlyChart(user);
+
+        assertThat(response.currentMonth().month()).isEqualTo(currentMonth);
+        assertThat(response.currentMonth().days()).containsExactly(
+                new DailyAmount(currentDay, BigDecimal.valueOf(100), BigDecimal.valueOf(40)));
+        assertThat(response.previousMonth().month()).isEqualTo(previousMonth);
+        assertThat(response.previousMonth().days()).containsExactly(
+                new DailyAmount(previousDay, BigDecimal.valueOf(200), BigDecimal.ZERO));
+    }
+
+    @Test
+    void getMonthlyChart_no_incluye_dias_sin_transacciones() {
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        MonthlyChartResponse response = service.getMonthlyChart(user);
+
+        assertThat(response.currentMonth().days()).isEmpty();
+        assertThat(response.previousMonth().days()).isEmpty();
+    }
+
+    @Test
+    void getMonthlyChart_ordena_los_dias_del_mes_ascendentemente() {
+        YearMonth currentMonth = YearMonth.now(ZoneId.of("UTC"));
+        LocalDate later = currentMonth.atDay(5);
+        LocalDate earlier = currentMonth.atDay(2);
+
+        Transaction laterTx = transactionOf(TransactionType.EXPENSE, BigDecimal.TEN);
+        laterTx.setDate(later);
+        Transaction earlierTx = transactionOf(TransactionType.EXPENSE, BigDecimal.ONE);
+        earlierTx.setDate(earlier);
+
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of(laterTx, earlierTx));
+
+        MonthlyChartResponse response = service.getMonthlyChart(user);
+
+        assertThat(response.currentMonth().days())
+                .extracting(DailyAmount::date)
+                .containsExactly(earlier, later);
     }
 }

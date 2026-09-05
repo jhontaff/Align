@@ -14,4 +14,5 @@ public interface TransactionService {
     TransactionResponse updateTransaction(UUID id, TransactionUpdateRequest request, User user);
     void deleteTransaction(UUID id, User user);
     FinancialSummaryResponse getSummary(User user, TransactionFilter filter);
+    MonthlyChartResponse getMonthlyChart(User user);
 }

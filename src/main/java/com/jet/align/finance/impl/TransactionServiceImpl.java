@@ -5,13 +5,21 @@ import com.jet.align.finance.*;
 import com.jet.align.finance.dto.*;
 import com.jet.align.finance.enums.TransactionType;
 import com.jet.align.user.User;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.   UUID;
 
 @Service
@@ -21,10 +29,14 @@ public class TransactionServiceImpl implements TransactionService {
     private static final String TRANSACTION_NOT_FOUND_MESSAGE = "Transaction not found with id: ";
     private final TransactionRepository repository;
     private final TransactionMapper mapper;
+    private final ZoneId timezone;
 
-    public TransactionServiceImpl(TransactionRepository transactionRepository, TransactionMapper mapper) {
+    public TransactionServiceImpl(TransactionRepository transactionRepository,
+                                   TransactionMapper mapper,
+                                   @Value("${align.timezone}") String timezone) {
         this.repository = transactionRepository;
         this.mapper = mapper;
+        this.timezone = ZoneId.of(timezone);
     }
 
     @Override
@@ -87,5 +99,50 @@ public class TransactionServiceImpl implements TransactionService {
             }
         }
         return totalSum;
+    }
+
+    @Override
+    @Transactional
+    public MonthlyChartResponse getMonthlyChart(User user) {
+        YearMonth currentMonth = YearMonth.now(timezone);
+        YearMonth previousMonth = currentMonth.minusMonths(1);
+
+        TransactionFilter range = new TransactionFilter(
+                null, null, previousMonth.atDay(1), currentMonth.atEndOfMonth());
+        List<Transaction> transactions = repository.findAll(TransactionSpecifications.withFilter(user, range));
+
+        Map<LocalDate, DailyAmount> byDate = groupByDate(transactions);
+
+        return new MonthlyChartResponse(
+                toSeries(currentMonth, byDate),
+                toSeries(previousMonth, byDate));
+    }
+
+    private Map<LocalDate, DailyAmount> groupByDate(List<Transaction> transactions) {
+        Map<LocalDate, BigDecimal[]> totals = new LinkedHashMap<>();
+        for (Transaction transaction : transactions) {
+            BigDecimal[] dayTotals = totals.computeIfAbsent(
+                    transaction.getDate(), d -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+            if (transaction.getType() == TransactionType.INCOME) {
+                dayTotals[0] = dayTotals[0].add(transaction.getAmount());
+            } else {
+                dayTotals[1] = dayTotals[1].add(transaction.getAmount());
+            }
+        }
+
+        Map<LocalDate, DailyAmount> byDate = new LinkedHashMap<>();
+        totals.forEach((date, dayTotals) -> byDate.put(date, new DailyAmount(date, dayTotals[0], dayTotals[1])));
+        return byDate;
+    }
+
+    private MonthlySeries toSeries(YearMonth month, Map<LocalDate, DailyAmount> byDate) {
+        List<DailyAmount> days = new ArrayList<>();
+        byDate.forEach((date, amount) -> {
+            if (YearMonth.from(date).equals(month)) {
+                days.add(amount);
+            }
+        });
+        days.sort(Comparator.comparing(DailyAmount::date));
+        return new MonthlySeries(month, days);
     }
 }

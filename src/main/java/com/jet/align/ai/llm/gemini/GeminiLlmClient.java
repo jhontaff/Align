@@ -34,6 +34,8 @@ public class GeminiLlmClient implements LlmClient {
 
     private final RestClient geminiRestClient;
     private final GeminiProperties properties;
+    private final GeminiApiKeyPool keyPool;
+
 
     /**
      * Gemini solo soporta un subconjunto del schema OpenAPI 3.0 (no JSON
@@ -47,23 +49,36 @@ public class GeminiLlmClient implements LlmClient {
 
     @Override
     public LlmResponse chat(LlmRequest request) {
-        GeminiApi.GenerateContentResponse response;
-        try {
-            response = geminiRestClient.post()
-                    .uri("/models/{model}:generateContent", properties.model())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(toGeminiRequest(request))
-                    .retrieve()
-                    .body(GeminiApi.GenerateContentResponse.class);
-        } catch (HttpClientErrorException.TooManyRequests | HttpServerErrorException e) {
-            throw new LlmUnavailableException(
-                    "Gemini no está disponible en este momento (rate limit o caída del proveedor).", e);
-        } catch (RestClientResponseException e) {
-            throw new LlmException("Gemini rechazó la solicitud: " + e.getMessage(), e);
+        HttpClientErrorException.TooManyRequests lastRateLimitError = null;
+
+        for (int attempt = 0; attempt < keyPool.size(); attempt++) {
+            String apiKey = keyPool.next();
+            try {
+                GeminiApi.GenerateContentResponse response = geminiRestClient.post()
+                        .uri("/models/{model}:generateContent", properties.model())
+                        .header("x-goog-api-key", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(toGeminiRequest(request))
+                        .retrieve()
+                        .body(GeminiApi.GenerateContentResponse.class);
+                return toLlmResponse(response);
+            } catch (HttpClientErrorException.TooManyRequests e) {
+                lastRateLimitError = e;
+
+            } catch (HttpServerErrorException e) {
+                throw new LlmUnavailableException(
+                        "Gemini no está disponible en este momento (rate limit o caída del proveedor).", e);
+            } catch (RestClientResponseException e) {
+                throw new LlmException("Gemini rechazó la solicitud: " + e.getMessage(), e);
+            }
         }
 
-        return toLlmResponse(response);
+        throw new LlmUnavailableException(
+                "Gemini no está disponible en este momento (todas las keys del pool están rate-limited).",
+                lastRateLimitError);
     }
+
+
 
     // --- salida: nuestro contrato -> formato Gemini ----------------------
 
