@@ -2,6 +2,6 @@ package com.jet.align.ai.llm;
 
 public interface LlmClient {
 
-    LlmResponse chat(LlmRequest request);
+    LlmResponse chat(LlmRequest request, LlmApiKey apiKey);
 
 }

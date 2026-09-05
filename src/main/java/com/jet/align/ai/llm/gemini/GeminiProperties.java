@@ -2,16 +2,15 @@ package com.jet.align.ai.llm.gemini;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.util.List;
-
 /**
  * Configuración del proveedor Gemini, leída de application.properties
- * (prefijo {@code align.gemini}). La API key nunca va en el código: llega
- * por variable de entorno.
+ * (prefijo {@code align.gemini}).
+ *
+ * <p>Acá ya no hay ninguna API key: desde BYOK, la key la aporta cada usuario
+ * y viaja por request ({@code LlmApiKey}), no por configuración.
  */
 @ConfigurationProperties(prefix = "align.gemini")
 public record GeminiProperties(
-        List<String> apiKeys,
         String baseUrl,
         String model
 ) {
