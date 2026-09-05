@@ -119,6 +119,22 @@ public class HabitServiceImpl implements HabitService {
     }
 
     @Override
+    @Transactional
+    public HabitResponse uncompleteHabit(User user, UUID habitId) {
+        Habit habit = habitRepository.findByIdAndUser(habitId, user)
+                .orElseThrow(() -> new ResourceNotFoundException(HABIT_NOT_FOUND_MESSAGE + habitId));
+
+        LocalDate today = LocalDate.now(timezone);
+        habitCompletionRepository.deleteByHabitAndDate(habit, today);
+
+        List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
+        int currentStreak = calculateStreak(completions);
+        int longestStreak = calculateLongestStreak(completions);
+        boolean isCompletedToday = isCompletedToday(completions);
+        return mapper.toResponse(habit, currentStreak, longestStreak, isCompletedToday);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<Habit> findHabitsAtRisk() {
         return habitRepository.findAll().stream()

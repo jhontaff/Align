@@ -97,4 +97,16 @@ class HabitControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().data()).isEqualTo(expected);
     }
+
+    @Test
+    void uncompleteHabit_devuelve_200_con_el_habito_y_streak_actualizados() {
+        UUID id = UUID.randomUUID();
+        HabitResponse expected = sampleResponse(id, 0, 4, false);
+        when(habitService.uncompleteHabit(user, id)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<HabitResponse>> response = controller.uncompleteHabit(id, user);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().data()).isEqualTo(expected);
+    }
 }

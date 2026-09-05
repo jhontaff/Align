@@ -198,6 +198,51 @@ class HabitServiceImplTest {
     }
 
     @Test
+    void uncompleteHabit_lanza_ResourceNotFoundException_si_no_existe_o_no_es_del_usuario() {
+        UUID id = UUID.randomUUID();
+        when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.uncompleteHabit(user, id))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void uncompleteHabit_borra_la_completion_de_hoy_y_recalcula_el_streak() {
+        UUID id = UUID.randomUUID();
+        Habit habit = new Habit();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
+
+        when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of());
+        when(mapper.toResponse(habit, 0, 0, false)).thenReturn(sampleResponse(id, 0, 0, false));
+
+        HabitResponse response = service.uncompleteHabit(user, id);
+
+        verify(habitCompletionRepository).deleteByHabitAndDate(habit, today);
+        assertThat(response.currentStreak()).isEqualTo(0);
+        assertThat(response.isCompletedToday()).isFalse();
+    }
+
+    // uncompleteHabit es idempotente igual que completeHabit: si hoy nunca se
+    // habia marcado como completado, no hay nada que deshacer y no deberia fallar.
+    @Test
+    void uncompleteHabit_es_idempotente_si_el_habito_no_estaba_completado_hoy() {
+        UUID id = UUID.randomUUID();
+        Habit habit = new Habit();
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
+
+        when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.of(habit));
+        when(habitCompletionRepository.deleteByHabitAndDate(habit, today)).thenReturn(0L);
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of(
+                completionOn(today.minusDays(1))));
+        when(mapper.toResponse(habit, 1, 1, false)).thenReturn(sampleResponse(id, 1, 1, false));
+
+        HabitResponse response = service.uncompleteHabit(user, id);
+
+        assertThat(response.currentStreak()).isEqualTo(1);
+    }
+
+    @Test
     void streak_es_cero_cuando_no_hay_completions() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();

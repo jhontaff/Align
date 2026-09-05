@@ -83,4 +83,14 @@ public class HabitController {
                         response
                 ));
     }
+
+    @DeleteMapping("/{id}/completions")
+    public ResponseEntity<ApiResponse<HabitResponse>> uncompleteHabit(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal User user) {
+        HabitResponse response = habitService.uncompleteHabit(user, id);
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK, "Habit marked as incomplete.",
+                        response
+                ));
+    }
 }
