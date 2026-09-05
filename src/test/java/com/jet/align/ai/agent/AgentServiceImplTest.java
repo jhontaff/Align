@@ -6,6 +6,7 @@ import com.jet.align.ai.agent.dto.ChatHistoryResponse;
 import com.jet.align.ai.agent.dto.ChatTurn;
 import com.jet.align.ai.agent.execution.ToolExecutionService;
 import com.jet.align.ai.agent.impl.AgentServiceImpl;
+import com.jet.align.ai.credential.LlmCredentialService;
 import com.jet.align.ai.llm.*;
 import com.jet.align.ai.memory.ConversationMemory;
 import com.jet.align.ai.memory.UserMemoryService;
@@ -22,7 +23,9 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AgentServiceImplTest {
 
@@ -51,7 +54,7 @@ class AgentServiceImplTest {
         // LlmClient falso y guionizado: si en la historia ya hay un ToolMessage
         // (es decir, ya ejecutamos una tool) responde con texto; si no, pide
         // create_task. Esto reproduce las dos vueltas del bucle real.
-        LlmClient scriptedClient = request -> {
+        LlmClient scriptedClient = (request, apiKey) -> {
             requestsSeen.add(request);
 
             boolean toolAlreadyRun = request.messages().stream()
@@ -79,6 +82,7 @@ class AgentServiceImplTest {
 
         AgentServiceImpl agent = new AgentServiceImpl(
                 scriptedClient,
+                credentialsConfigured(),
                 execution,
                 new ToolRegistry(List.of()),   // sin tools registradas: los specs no importan aquí
                 memory,
@@ -110,7 +114,7 @@ class AgentServiceImplTest {
         SpyConversationMemory memory = new SpyConversationMemory(List.of());
 
         // Nunca resuelve: siempre vuelve a pedir la misma tool.
-        LlmClient neverEndingClient = request -> new LlmResponse(
+        LlmClient neverEndingClient = (request, apiKey) -> new LlmResponse(
                 new AssistantMessage(null, List.of(
                         new ToolCall("call_x", "create_task", Map.of()))));
 
@@ -119,6 +123,7 @@ class AgentServiceImplTest {
 
         AgentServiceImpl agent = new AgentServiceImpl(
                 neverEndingClient,
+                credentialsConfigured(),
                 execution,
                 new ToolRegistry(List.of()),
                 memory,
@@ -142,7 +147,8 @@ class AgentServiceImplTest {
         // LLM y tools no deberían tocarse para leer historial: si getHistory
         // los llamara, el test explota en vez de fallar en silencio.
         AgentServiceImpl agent = new AgentServiceImpl(
-                request -> { throw new UnsupportedOperationException("getHistory no debería llamar al LLM"); },
+                (request, apiKey) -> { throw new UnsupportedOperationException("getHistory no debería llamar al LLM"); },
+                credentialsConfigured(),
                 (toolCall, user) -> { throw new UnsupportedOperationException("getHistory no debería ejecutar tools"); },
                 new ToolRegistry(List.of()),
                 memory,
@@ -166,7 +172,8 @@ class AgentServiceImplTest {
                 new ToolMessage("call_1", "{}")));
 
         AgentServiceImpl agent = new AgentServiceImpl(
-                request -> { throw new UnsupportedOperationException(); },
+                (request, apiKey) -> { throw new UnsupportedOperationException(); },
+                credentialsConfigured(),
                 (toolCall, user) -> { throw new UnsupportedOperationException(); },
                 new ToolRegistry(List.of()),
                 memory,
@@ -177,6 +184,18 @@ class AgentServiceImplTest {
 
         assertThatThrownBy(() -> agent.getHistory(null))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    /**
+     * Doble de {@link LlmCredentialService} para un usuario que ya configuró
+     * su API key. El agente resuelve la credencial en cada chat(), así que sin
+     * esto todos los tests fallarían por falta de key en vez de por lo que
+     * realmente prueban.
+     */
+    private static LlmCredentialService credentialsConfigured() {
+        LlmCredentialService credentials = mock(LlmCredentialService.class);
+        when(credentials.resolve(any())).thenReturn(new LlmApiKey("test-api-key"));
+        return credentials;
     }
 
     /**

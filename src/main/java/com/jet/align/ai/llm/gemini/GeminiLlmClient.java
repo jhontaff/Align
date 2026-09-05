@@ -1,7 +1,9 @@
 package com.jet.align.ai.llm.gemini;
 
 import com.jet.align.ai.llm.AssistantMessage;
+import com.jet.align.ai.llm.LlmApiKey;
 import com.jet.align.ai.llm.LlmClient;
+import com.jet.align.ai.llm.LlmCredentialValidator;
 import com.jet.align.ai.llm.LlmRequest;
 import com.jet.align.ai.llm.LlmResponse;
 import com.jet.align.ai.llm.Message;
@@ -9,7 +11,9 @@ import com.jet.align.ai.llm.SystemMessage;
 import com.jet.align.ai.llm.ToolMessage;
 import com.jet.align.ai.llm.UserMessage;
 import com.jet.align.ai.llm.ToolCall;
+import com.jet.align.common.exception.LlmCredentialInvalidException;
 import com.jet.align.common.exception.LlmException;
+import com.jet.align.common.exception.LlmQuotaExceededException;
 import com.jet.align.common.exception.LlmUnavailableException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -30,12 +34,12 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "align.llm", name = "provider", havingValue = "gemini")
-public class GeminiLlmClient implements LlmClient {
+public class GeminiLlmClient implements LlmClient, LlmCredentialValidator {
+
+    private static final String API_KEY_HEADER = "x-goog-api-key";
 
     private final RestClient geminiRestClient;
     private final GeminiProperties properties;
-    private final GeminiApiKeyPool keyPool;
-
 
     /**
      * Gemini solo soporta un subconjunto del schema OpenAPI 3.0 (no JSON
@@ -48,37 +52,72 @@ public class GeminiLlmClient implements LlmClient {
             "type", "format", "description", "nullable", "enum", "properties", "required", "items", "propertyOrdering");
 
     @Override
-    public LlmResponse chat(LlmRequest request) {
-        HttpClientErrorException.TooManyRequests lastRateLimitError = null;
+    public LlmResponse chat(LlmRequest request, LlmApiKey apiKey) {
+        try {
+            GeminiApi.GenerateContentResponse response = geminiRestClient.post()
+                    .uri("/models/{model}:generateContent", properties.model())
+                    .header(API_KEY_HEADER, apiKey.value())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(toGeminiRequest(request))
+                    .retrieve()
+                    .body(GeminiApi.GenerateContentResponse.class);
 
-        for (int attempt = 0; attempt < keyPool.size(); attempt++) {
-            String apiKey = keyPool.next();
-            try {
-                GeminiApi.GenerateContentResponse response = geminiRestClient.post()
-                        .uri("/models/{model}:generateContent", properties.model())
-                        .header("x-goog-api-key", apiKey)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(toGeminiRequest(request))
-                        .retrieve()
-                        .body(GeminiApi.GenerateContentResponse.class);
-                return toLlmResponse(response);
-            } catch (HttpClientErrorException.TooManyRequests e) {
-                lastRateLimitError = e;
+            return toLlmResponse(response);
 
-            } catch (HttpServerErrorException e) {
-                throw new LlmUnavailableException(
-                        "Gemini no está disponible en este momento (rate limit o caída del proveedor).", e);
-            } catch (RestClientResponseException e) {
-                throw new LlmException("Gemini rechazó la solicitud: " + e.getMessage(), e);
-            }
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            throw new LlmQuotaExceededException(
+                    "Tu API key de Gemini agotó la cuota disponible. Probá de nuevo más tarde.", e);
+
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
+            // 401/403 señalan a la credencial sin ambigüedad. Un 400 NO se mapea
+            // acá: Gemini también devuelve 400 cuando el request está mal armado
+            // (un schema de tool inválido, por ejemplo), y culpar a la key del
+            // usuario por un bug nuestro lo mandaría a reconfigurar algo que
+            // está bien.
+            throw new LlmCredentialInvalidException(
+                    "Gemini rechazó tu API key. Volvé a configurarla.", e);
+
+        } catch (HttpServerErrorException e) {
+            throw new LlmUnavailableException(
+                    "Gemini no está disponible en este momento.", e);
+
+        } catch (RestClientResponseException e) {
+            throw new LlmException("Gemini rechazó la solicitud: " + e.getMessage(), e);
         }
-
-        throw new LlmUnavailableException(
-                "Gemini no está disponible en este momento (todas las keys del pool están rate-limited).",
-                lastRateLimitError);
     }
 
+    /**
+     * Valida la key con un GET al listado de modelos: es la llamada más barata
+     * que ejerce la autenticación (no consume cuota de generación) y ya detecta
+     * los dos casos que importan, key inválida y proyecto sin acceso.
+     *
+     * <p>Acá cualquier 4xx sí se interpreta como "la key no sirve", al revés que
+     * en {@link #chat}: este request no lleva payload que podamos haber armado
+     * mal, así que no hay otra explicación posible.
+     */
+    @Override
+    public void validate(LlmApiKey apiKey) {
+        try {
+            geminiRestClient.get()
+                    .uri("/models")
+                    .header(API_KEY_HEADER, apiKey.value())
+                    .retrieve()
+                    .toBodilessEntity();
 
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            throw new LlmQuotaExceededException(
+                    "La API key es válida pero está sin cuota disponible en este momento.", e);
+
+        } catch (HttpClientErrorException e) {
+            throw new LlmCredentialInvalidException(
+                    "La API key no es válida o su proyecto no tiene acceso a Gemini.", e);
+
+        } catch (HttpServerErrorException e) {
+            // El proveedor está caído: no es culpa de la key, no la rechacemos.
+            throw new LlmUnavailableException(
+                    "No se pudo verificar la API key porque Gemini no está disponible.", e);
+        }
+    }
 
     // --- salida: nuestro contrato -> formato Gemini ----------------------
 

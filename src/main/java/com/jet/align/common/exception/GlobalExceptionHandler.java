@@ -63,6 +63,50 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(LlmCredentialMissingException.class)
+    public ResponseEntity<ApiResponse<Void>> handleLlmCredentialMissing(
+            LlmCredentialMissingException ex) {
+
+        // 428 Precondition Required: el request es válido, pero falta cumplir un
+        // paso previo (configurar la API key). Es el único 428 de la app, así
+        // que el frontend lo puede usar como señal inequívoca de "abrí el wizard".
+        return ResponseEntity
+                .status(HttpStatus.PRECONDITION_REQUIRED)
+                .body(ApiResponse.error(
+                        HttpStatus.PRECONDITION_REQUIRED,
+                        ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(LlmCredentialInvalidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleLlmCredentialInvalid(
+            LlmCredentialInvalidException ex) {
+
+        // 409 y no 401/403: esos ya significan "tu sesión de Align no vale"
+        // (ver JwtAuthenticationEntryPoint), y el frontend confundiría un
+        // problema de la API key con uno de autenticación propia.
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(
+                        HttpStatus.CONFLICT,
+                        ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(LlmQuotaExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleLlmQuotaExceeded(
+            LlmQuotaExceededException ex) {
+
+        // La key es válida: no hay nada que reconfigurar, solo esperar. El
+        // frontend NO debe abrir el wizard con este status.
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiResponse.error(
+                        HttpStatus.TOO_MANY_REQUESTS,
+                        ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(LlmUnavailableException.class)
     public ResponseEntity<ApiResponse<Void>> handleLlmUnavailable(LlmUnavailableException ex) {
 
