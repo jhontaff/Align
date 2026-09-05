@@ -10,7 +10,6 @@ import com.jet.align.finance.dto.FinancialSummaryResponse;
 import com.jet.align.finance.dto.MonthlyChartResponse;
 import com.jet.align.finance.dto.CategoryAmount;
 import com.jet.align.finance.dto.CategoryBreakdownResponse;
-import com.jet.align.finance.dto.FinancialSummaryResponse;
 import com.jet.align.finance.dto.MonthlyPoint;
 import com.jet.align.finance.dto.MonthlySummaryFilter;
 import com.jet.align.finance.dto.MonthlySummaryResponse;
@@ -252,6 +251,8 @@ class TransactionServiceImplTest {
         assertThat(response.currentMonth().days())
                 .extracting(DailyAmount::date)
                 .containsExactly(earlier, later);
+    }
+
     // getMonthlySummary: ventana adaptativa por defecto (sin from/to en el filtro)
 
     @Test

@@ -137,6 +137,12 @@ class TransactionControllerTest {
         when(transactionService.getMonthlyChart(user)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<MonthlyChartResponse>> response = controller.getMonthlyChart(user);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().data()).isEqualTo(expected);
+    }
+
+    @Test
     void getMonthlySummary_devuelve_200_con_la_serie_mensual_del_service() {
         MonthlySummaryFilter filter = new MonthlySummaryFilter(null, null, null, null);
         MonthlySummaryResponse expected = new MonthlySummaryResponse(List.of(
