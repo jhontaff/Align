@@ -32,7 +32,6 @@ import java.util.List;
 @Builder(toBuilder = true)
 public class User extends BaseEntity implements UserDetails {
 
-    @Email
     @NotBlank
     @Column(nullable = false, length = 150)
     private String email;

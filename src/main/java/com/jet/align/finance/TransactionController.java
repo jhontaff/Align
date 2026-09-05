@@ -115,4 +115,16 @@ public class TransactionController {
                         "Transaction summary retrieved successfully.",
                         response));
     }
+
+    @GetMapping("/monthly-chart")
+    public ResponseEntity<ApiResponse<MonthlyChartResponse>> getMonthlyChart(
+            @AuthenticationPrincipal User user
+    ) {
+        MonthlyChartResponse response = transactionService.getMonthlyChart(user);
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        HttpStatus.OK,
+                        "Monthly chart data retrieved successfully.",
+                        response));
+    }
 }

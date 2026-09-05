@@ -450,6 +450,30 @@ Not yet done — the VPS setup itself, tracked here so a new session knows where
 
 ---
 
+# Response scope guardrail — legal liability (`SystemPromptBuilder`)
+
+Added 2026-09-04, prompted by a direct question about legal exposure ahead of the VPS production deploy — anticipatory hardening, not a reaction to any actual incident, same spirit as the JWT-expiration fix in `auth`.
+
+Problem framing agreed: without a stated scope, the LLM has no reason to decline requests it can technically answer in prose but that belong to a licensed profession — a wrong answer there carries real legal exposure ("¿debería demandar a mi vecino?", specific tax/investment advice), unlike a wrong tool call, which is bounded and reversible by construction (`PendingAction`, correctable updates).
+
+Decision, deliberately narrowed from a first draft: the boundary is **not** by domain/topic ("finanzas" in/out) but by **type of advice** — practical guidance grounded in the user's own data (tasks, habits, transactions, calendar) stays in scope, since that's literally what Align's domains already do; advice that substitutes for a licensed professional (medical, legal, psychological, or specific investment/tax strategy) stays out. The first draft vetoed "financiero" wholesale, which conflicted with Finance's own purpose (spending/budget guidance) — caught and corrected before implementing.
+
+- **Prompt-only, not a structural guardrail** — same trade-off already made explicit in Phase 3 for `RiskLevel` (Option A vs B there): a classifier/filter step outside the LLM's own reasoning would be a hard guarantee, but is unbuilt infrastructure with zero evidence it's needed. Chosen deliberately as the MVP's first cut, not a placeholder — Align is single-user with no adversarial third party probing the boundary, and nothing here is an irreversible action the way `PendingAction`'s destructive tools are, so the risk doesn't yet justify the harder guarantee. Revisit only if a real instance of the model being talked past this line shows up.
+- **Lives in `SystemPromptBuilder`, not a new component** — same "ambient context" rule from [Phase 2](#phase-2--user-context-complete) (small, bounded, relevant to nearly every message) that already governs date/timezone/memories. Not an action and not a domain capability, so never a candidate for a `Tool`.
+
+Implemented: one paragraph appended to `SystemPromptBuilder.build`'s text block — states that practical, data-grounded advice is in scope, and that licensed-professional advice (médico/legal/psicológico, plus specific investment/tax strategy) is out of scope with a redirect instruction. `SystemPromptBuilderTest` gained a case asserting both halves of that line appear in the prompt.
+
+Caught while writing the test, worth remembering for any future edit to this text block: an assertion spanning two lines of the block failed even though the text visibly "looked" contiguous in printed test output. Java text blocks preserve literal line breaks as real `\n` characters (no trailing `\` used anywhere in this block to suppress them), so a `.contains()` check crossing a wrapped-line boundary silently fails against a newline it can't see past. Fixed by keeping each assertion substring within a single physical source line — the same constraint every prior assertion in this test file already (implicitly) honored. Same "the build won't catch it" category as the `@Transactional`-override, FK-cascade, and Flyway-uppercase-`V` gotchas already documented elsewhere in this file.
+
+Confirmed working end-to-end: manually tested against the live chat agent with both a practical-advice question (in scope) and a professional-advice question (out of scope) — the model made the distinction correctly.
+
+Known gaps, deliberate for this first cut:
+
+- The boundary is persuadable — a soft, prompt-level guarantee, not structurally enforced. Acceptable for a single-user personal project; not tested against adversarial phrasing, and not meant to be yet.
+- "Psicológico" is vetoed outright, but Habit already touches wellbeing-adjacent territory (sleep, exercise routines), and the line between "hábito" and "salud mental" could blur if that domain grows (e.g. "no puedo dormir, me siento ansioso"). No tool or domain touches mental health today, so vetoing it is consistent — but this is a live tension flagged during design, not a closed decision.
+
+---
+
 # AI architecture
 
 The AI layer orchestrates business capabilities.
@@ -529,6 +553,36 @@ Current coverage: `POST /api/agent/chat` (existing) and `GET /api/agent/history`
 - Done, project-wide fix driven by this feature: `GlobalExceptionHandler`'s catch-all `handleException` (which is what handles the `IllegalStateException` above, since it has no dedicated handler) now logs the exception before returning its generic 500. It previously logged nothing, so any unmapped exception anywhere in the app — not just this one — would reach the client as a bare 500 with zero trace in the logs, defeating the point of failing loudly. Same "log detail internally, respond generically to the client" pattern `AgentServiceImpl.runTool` already used for unexpected tool failures.
 - Done: test coverage in `AgentServiceImplTest` — the happy path (`UserMessage`/`AssistantMessage` → `ChatTurn` list) and the invariant-violation path (`ToolMessage` in history → `IllegalStateException`). Plain JUnit 5 unit tests using the existing `SpyConversationMemory` double, no Spring context, matching the rest of the AI layer's tests. No `AgentControllerTest` exists for either endpoint (`chat` was never tested at the controller layer either) — history is only tested at the service layer.
 - Known gap: `getHistory` returns the entire persisted history every time, no pagination or trimming — it inherits the "single serialized blob, not row-per-message" shape already noted in Conversation memory above. Revisit only if history grows large enough for that to matter.
+
+## Gemini API key pooling (`ai.llm.gemini`) — implemented, pending real keys
+
+Designed 2026-09-04, while planning the first production deploy. Problem framing agreed: `align.gemini.api-key` is a single global key today, but production is explicitly targeting real external users (not solo-operator use, confirmed during this design discussion) — once other people register, all their chat traffic hits the same key/quota, and if config ever moved to a paid tier, the operator would be billed for everyone's usage.
+
+Three options were compared: the user bringing their own key (BYOK — rejected, turns the app into a custodian of third-party secrets and adds real onboarding friction before someone can chat), eating the cost on a single global key with a self-imposed rate cap (rejected for now — doesn't solve the actual goal, which is "users don't pay"), and pooling several operator-owned free-tier keys behind a round-robin selector (**chosen**) — cheapest to build, no new secret-custody surface, and no `User`-level changes at all, since key selection is purely an `ai.llm.gemini`-internal concern; `LlmClient`'s neutral contract (`chat(LlmRequest)`) doesn't change, confirming the provider-isolation principle elsewhere in this file is doing its job.
+
+Key architectural finding that shapes the implementation: today's key is baked into the `RestClient` bean once at startup (`GeminiConfig.geminiRestClient`, `.defaultHeader("x-goog-api-key", ...)`) — a singleton, built once. Pooling requires the key to vary per call, so authentication has to move from a default header on the client to a per-request header set inside `GeminiLlmClient.chat()`.
+
+Decisions made:
+
+- **Round-robin with retry-on-429**, not blind round-robin. A key that comes back rate-limited mid-request falls through to the next key in the pool (bounded to pool size, to avoid an infinite loop) rather than surfacing `LlmUnavailableException` to that one unlucky user. Safe to retry because `generateContent` has no side effects.
+- **10 keys from 10 separate Google accounts**, not 10 keys under one Cloud project — chosen specifically to avoid the risk that Gemini's free-tier quota is enforced per-project rather than per-key, which would make pooling not actually multiply capacity.
+- **Never log a raw key value.** If observability around which key failed is added later, log the key's index in the pool (0–9), never the key itself.
+- **The pool is in-memory and scoped to a single JVM instance** (an `AtomicInteger` cursor inside a new `GeminiApiKeyPool` component — no Redis, no shared coordination). Deliberate, same guiding constraint against adopting infra without a concrete need that governs the rest of this roadmap, and consistent with the VPS decision (one always-on instance, no horizontal scaling) in [Production deployment](#production-deployment-mvp). **This becomes a real limitation the moment Align ever runs more than one instance behind a load balancer** — each instance would keep its own independent cursor, breaking the even-distribution assumption. Not a problem today; flagged so it's a known, deliberate trade-off rather than a surprise later.
+
+Implemented, 2026-09-04 (code written by the user, guided step by step rather than generated):
+
+- Done: `GeminiProperties.apiKey: String` → `apiKeys: List<String>`.
+- Done: `GeminiApiKeyPool` (`ai.llm.gemini`, package-private) — holds the key list plus an `AtomicInteger` cursor, `next()` does round-robin via `cursor.getAndUpdate(i -> (i + 1) % keys.size())`, constructor fails fast (`IllegalStateException`) if `apiKeys` is null/empty rather than NPE-ing on the first chat request.
+- Done: `GeminiConfig` — `.defaultHeader("x-goog-api-key", ...)` removed from the `RestClient` bean; the key can no longer be fixed at bean-construction time since it now varies per call.
+- Done: `GeminiLlmClient.chat()` — loops up to `keyPool.size()` attempts, pulling a fresh key from the pool each time and setting it as a per-request `.header(...)` (not a client default anymore). Only `HttpClientErrorException.TooManyRequests` (429) triggers a retry with the next key; `HttpServerErrorException` (5xx) still fails immediately into `LlmUnavailableException` as before, since a different key doesn't fix a Gemini-side outage. Exhausting the pool without success throws `LlmUnavailableException` with the last 429 as cause.
+- Done: `align.gemini.api-key` → `align.gemini.api-keys` renamed in `application-prod.properties` (`${GEMINI_API_KEYS:}`, still ties into the open "env vars/secrets for the systemd unit" item in [Production deployment](#production-deployment-mvp)) and `application-ci.properties` (`ci-dummy`, single-element list, satisfies the pool's non-empty check without needing 10 real keys for CI). `application-dev.properties` has the property commented out with the expected comma-separated shape — deliberately left absent (not a placeholder value) so the existing fail-fast still triggers clearly if the developer forgets to fill it in, rather than silently pooling over one blank/fake key.
+
+Known gaps, real and left open on purpose:
+
+- **The 10 real keys aren't generated yet** — the user's next step is creating 10 separate Google accounts/API keys (per the per-project-vs-per-key quota concern above) and filling in `application-dev.properties`, then whatever prod's secret store ends up being.
+- **No manual smoke test yet** — haven't confirmed end-to-end that the header rotates correctly across real calls or that a real 429 actually falls through to the next key. Do this once real keys exist, before considering the feature done.
+- **No `GeminiApiKeyPoolTest`** — flagged during design as the one piece of genuinely new logic that earns a unit test (pure round-robin, no Spring context needed), but not written yet.
+- **A known, accepted concurrency edge case**: the retry loop in `chat()` assumes calling `keyPool.next()` up to `keyPool.size()` times tries every key exactly once, which only holds if this call has exclusive access to the shared cursor. Under real concurrent traffic, another request's calls to `next()` interleave with this loop's, so a retry burst could occasionally hit the same key twice and never reach one that was actually free — meaning it could give up prematurely despite an untried key being available. Deliberately not fixed (would need tracking already-tried keys per call, e.g. a local `Set`, adding real complexity) — same YAGNI stance as the rest of this roadmap: it needs simultaneous heavy concurrent traffic *and* multiple simultaneous 429s to manifest at all, well beyond Align's current scale. Revisit only if it's ever observed in practice.
 
 ---
 

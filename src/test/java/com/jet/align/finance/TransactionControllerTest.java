@@ -1,7 +1,10 @@
 package com.jet.align.finance;
 
 import com.jet.align.common.response.ApiResponse;
+import com.jet.align.finance.dto.DailyAmount;
 import com.jet.align.finance.dto.FinancialSummaryResponse;
+import com.jet.align.finance.dto.MonthlyChartResponse;
+import com.jet.align.finance.dto.MonthlySeries;
 import com.jet.align.finance.dto.MonthlyPoint;
 import com.jet.align.finance.dto.MonthlySummaryFilter;
 import com.jet.align.finance.dto.MonthlySummaryResponse;
@@ -126,6 +129,14 @@ class TransactionControllerTest {
     }
 
     @Test
+    void getMonthlyChart_devuelve_200_con_la_data_del_service() {
+        MonthlyChartResponse expected = new MonthlyChartResponse(
+                new MonthlySeries(YearMonth.of(2026, 9),
+                        List.of(new DailyAmount(LocalDate.of(2026, 9, 1), BigDecimal.TEN, BigDecimal.ZERO))),
+                new MonthlySeries(YearMonth.of(2026, 8), List.of()));
+        when(transactionService.getMonthlyChart(user)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<MonthlyChartResponse>> response = controller.getMonthlyChart(user);
     void getMonthlySummary_devuelve_200_con_la_serie_mensual_del_service() {
         MonthlySummaryFilter filter = new MonthlySummaryFilter(null, null, null, null);
         MonthlySummaryResponse expected = new MonthlySummaryResponse(List.of(

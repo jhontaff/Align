@@ -48,4 +48,13 @@ class SystemPromptBuilderTest {
 
         assertThat(prompt).doesNotContain("Esto es lo que recordás sobre el usuario");
     }
+
+    @Test
+    void el_prompt_permite_consejos_practicos_pero_limita_el_asesoramiento_profesional() {
+        String prompt = SystemPromptBuilder.build(new UserContext(LocalDateTime.of(2026, 8, 2, 14, 35), List.of()));
+
+        assertThat(prompt)
+                .contains("Está bien dar consejos prácticos basados en los datos del usuario")
+                .contains("asesoramiento profesional que requiera una licencia");
+    }
 }

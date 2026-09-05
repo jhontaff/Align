@@ -25,7 +25,7 @@ class GeminiConfig {
     RestClient geminiRestClient(RestClient.Builder builder, GeminiProperties properties) {
         return builder
                 .baseUrl(properties.baseUrl())
-                .defaultHeader("x-goog-api-key", properties.apiKey())
                 .build();
     }
 }
+
