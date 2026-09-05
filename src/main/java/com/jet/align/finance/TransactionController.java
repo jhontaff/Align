@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @RestController
@@ -79,6 +80,28 @@ public class TransactionController {
                         "Transaction deleted successfully.",
                         null));
     }
+
+    @GetMapping("/summary/monthly")
+    public ResponseEntity<ApiResponse<MonthlySummaryResponse>> getMonthlySummary(
+            @AuthenticationPrincipal User user,
+            @ModelAttribute MonthlySummaryFilter filter
+    ) {
+        MonthlySummaryResponse response = transactionService.getMonthlySummary(user, filter);
+        return ResponseEntity.ok(
+                ApiResponse.success(HttpStatus.OK, "Monthly summary retrieved successfully.", response));
+    }
+
+    @GetMapping("/summary/by-category")
+    public ResponseEntity<ApiResponse<CategoryBreakdownResponse>> getCategoryBreakdown(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to
+    ) {
+        CategoryBreakdownResponse response = transactionService.getCategoryBreakdown(user, from, to);
+        return ResponseEntity.ok(
+                ApiResponse.success(HttpStatus.OK, "Category breakdown retrieved successfully.", response));
+    }
+
 
     @GetMapping("/summary")
     public ResponseEntity<ApiResponse<FinancialSummaryResponse>> getTransactionSummary(

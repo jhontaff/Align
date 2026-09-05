@@ -5,6 +5,7 @@ import com.jet.align.user.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 public interface TransactionService {
@@ -15,4 +16,7 @@ public interface TransactionService {
     void deleteTransaction(UUID id, User user);
     FinancialSummaryResponse getSummary(User user, TransactionFilter filter);
     MonthlyChartResponse getMonthlyChart(User user);
+    MonthlySummaryResponse getMonthlySummary(User user, MonthlySummaryFilter filter);
+    CategoryBreakdownResponse getCategoryBreakdown(User user, LocalDate from, LocalDate to);
+
 }
