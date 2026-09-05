@@ -22,6 +22,7 @@ class GeminiApiKeyPool {
 
     String next() {
         int index = cursor.getAndUpdate(i -> (i + 1) % keys.size());
+        System.out.println("[SMOKE TEST] GeminiApiKeyPool.next() -> index " + index + " / " + keys.size());
         return keys.get(index);
     }
 

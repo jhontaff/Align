@@ -34,7 +34,6 @@ public class TransactionServiceImpl implements TransactionService {
     private final ZoneId timezone;
     private final TransactionRepository repository;
     private final TransactionMapper mapper;
-    private final ZoneId timezone;
 
     public TransactionServiceImpl(TransactionRepository transactionRepository,
                                    TransactionMapper mapper,
