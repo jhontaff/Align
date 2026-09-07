@@ -35,9 +35,10 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           port: ${{ secrets.VPS_SSH_PORT }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: ./artifact/align-0.0.1-SNAPSHOT.jar
-          target: /opt/align/releases/
+          source: artifact/align-0.0.1-SNAPSHOT.jar
+          target: /opt/align/incoming
           strip_components: 1
+
 
 
       - name: Activate and restart
@@ -52,8 +53,13 @@ jobs:
             NEW=/opt/align/releases/${{ steps.rel.outputs.name }}
             CURRENT=/opt/align/current.jar
 
-            mv /opt/align/releases/align-0.0.1-SNAPSHOT.jar "$NEW"
+            SRC=$(find /opt/align/incoming -name '*.jar' -type f | head -1)
+            test -n "$SRC" || { echo "no se subió ningún jar"; find /opt/align/incoming; exit 1; }
+            mv "$SRC" "$NEW"
+            rm -rf /opt/align/incoming
+
             pg_dump -U align align_db | gzip > /opt/align/backups/pre-$(date +%F-%H%M%S).sql.gz
+
 
             # guardar a qué apuntaba, para rollback
             if [ -L "$CURRENT" ]; then
