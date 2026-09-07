@@ -438,15 +438,17 @@ A second real risk was identified and explicitly not solved: Option B trades awa
 
 Considered but **not** adopted: coarsening `PendingActionExpirationJob`'s `@Scheduled(fixedRate = ...)` from hourly to every 8 hours (`8 * 60 * 60 * 1000`). The case for it was "insignificant delay vs. the 24h TTL" plus lower DB/log load; the case against is that with Option A (always-on VPS) the *other* motivation — fewer cold-starts under scale-to-zero — never applied, and an hourly sweep is already trivially cheap (one derived query, usually zero rows). The job stays at `fixedRate = 60 * 60 * 1000`.
 
-Not yet done — the VPS setup itself, tracked here so a new session knows where this stands:
+**Done — deployed and live as of 2026-09-07.** Full detail (architecture diagram, VPS prereqs, workflow explanations, operations runbook, failure modes, known tech debt) lives in **`devops.md`** at repo root — it's the authoritative doc for anything deploy-related; this section only records the decision and the shape.
 
-- VPS provisioning (Ubuntu LTS assumed), SSH access, non-root user to run the app.
-- JDK 21 install (matches the app's existing Java version).
-- Postgres install + DB/user creation — Flyway migrates automatically on app startup, no manual schema step beyond that.
-- `systemd` unit for process supervision (auto-restart on crash/reboot) — replaces what a managed PaaS gives for free; without it, a crashed JVM stays down until someone notices.
-- nginx or Caddy reverse proxy + Let's Encrypt/certbot for TLS — **not optional**: Web Push requires HTTPS for the browser to accept a subscription (except on `localhost`), so this is a hard functional requirement of the `notification` domain, not just a security nicety.
-- Deploy mechanism (manual build+SCP+restart is acceptable for this first cut; scripting/CI can come later).
-- Env vars/secrets for the `systemd` unit — same externalized-config pattern the project already uses (`application-dev.properties`/`application-prod.properties` are gitignored), just needs a home in the VPS's service definition rather than a PaaS's secrets UI. Concretely: `DB_URL`/`DB_USER`/`DB_PASSWORD`, `JWT_SECRET`, the three `ALIGN_PUSH_VAPID_*`, and `ALIGN_CRYPTO_SECRET` (Base64 of 16/24/32 bytes — the AES master key for user API keys, see [BYOK](#byok--per-user-llm-credentials-aicredential--complete); the app fails fast without it, and changing it invalidates every stored credential).
+What actually got built (a few things diverged from the "not yet done" checklist that used to be here):
+
+- **CI/CD via GitHub Actions**, not manual SCP — the "scripting/CI can come later" option was taken now. `.github/workflows/ci.yml` (PRs + branches, Postgres service container so `contextLoads` runs for real against all 14 migrations) and `deploy.yml` (`main` only, `workflow_run`-chained, build-once: CI uploads the jar artifact, deploy downloads it). Deploy is gated by a GitHub Environment `production` with a required reviewer → one manual click before prod is touched. `pg_dump` backup before each restart; health-check loop with automatic symlink rollback.
+- **Reverse proxy = Nginx Proxy Manager** (dockerized), not Caddy or bare nginx. TLS via Let's Encrypt, managed through NPM's web panel (so no config file in the repo).
+- **Frontend** = `ghcr.io/jhontaff/align-web` (Angular + nginx) as a Docker container on an external `proxy` network shared with NPM. Its `nginx.conf` routes `/api` + `/auth` to the host backend via `host.docker.internal:8080`; everything else is SPA static. Single origin → no CORS.
+- **Backend** = plain jar on the host under `systemd` (`align.service`, user `align`), **port 8080** — not 1010. 1010 is a privileged port (<1024) and the unprivileged `align` user (`NoNewPrivileges=true`) can't bind it; fixed with `server.port=8080` in `application-prod.properties`.
+- **`application-prod.properties` is now force-committed** (`git add -f`) — it was gitignored, so the CI-built jar lacked it and the first deploy failed with "Failed to configure a DataSource". It carries only `${...}` placeholders + non-secret prod config, no secret values. `SecurityConfig` also gained `/actuator/health` in `permitAll()` (was behind auth → the deploy health check got 401).
+- **Secrets**: app secrets (`DB_*`, `JWT_SECRET`, `ALIGN_PUSH_VAPID_*`, `ALIGN_CRYPTO_SECRET`, `ALIGN_GEMINI_API_KEYS`) live in `/etc/align/align.env` (systemd `EnvironmentFile`, never in git — template at `deploy/align.env.example`). The pipeline only holds VPS-access secrets (`VPS_HOST`/`VPS_USER`/`VPS_SSH_PORT`/`VPS_SSH_KEY`) in the `production` environment.
+- Reference copies of the VPS-side config (`align.service`, `align.env.example`) are versioned under `deploy/` — not authoritative, just for review/reconstruction.
 
 ---
 
@@ -554,9 +556,21 @@ Current coverage: `POST /api/agent/chat` (existing) and `GET /api/agent/history`
 - Done: test coverage in `AgentServiceImplTest` — the happy path (`UserMessage`/`AssistantMessage` → `ChatTurn` list) and the invariant-violation path (`ToolMessage` in history → `IllegalStateException`). Plain JUnit 5 unit tests using the existing `SpyConversationMemory` double, no Spring context, matching the rest of the AI layer's tests. No `AgentControllerTest` exists for either endpoint (`chat` was never tested at the controller layer either) — history is only tested at the service layer.
 - Known gap: `getHistory` returns the entire persisted history every time, no pagination or trimming — it inherits the "single serialized blob, not row-per-message" shape already noted in Conversation memory above. Revisit only if history grows large enough for that to matter.
 
-## BYOK — per-user LLM credentials (`ai.credential`) — complete
+## BYOK — per-user LLM credentials (`ai.credential`) — built, then put dormant 2026-09-07
 
-Designed and built 2026-09-05. **This replaces the operator-owned key pool described in the previous version of this section, which is now deleted from the codebase** (`GeminiApiKeyPool`, `GeminiProperties.apiKeys`, `align.gemini.api-keys` and the retry-on-429 loop are all gone). Each user brings their own Gemini API key and chats under their own free-tier quota.
+**Current state (2026-09-07): BYOK is built but NOT wired into the chat.** The operator-owned key pool was restored and `AgentServiceImpl` uses it instead. Everything in `ai.credential` (`LlmCredential` entity, `ApiKeyCipher`, `LlmCredentialService` incl. `resolve()`, `LlmCredentialController` at `/api/ai/credentials`), migration `V14`, `LlmCredentialValidator`, `LlmApiKey`, and the `LlmCredentialInvalid/QuotaExceeded/Missing` exceptions + their 428/409/429 handlers all still exist and compile — the credential endpoints work standalone. Only the chat path changed: `AgentServiceImpl` no longer calls `resolve(user)` and no longer depends on `LlmCredentialService`; `LlmClient.chat` went back to one argument (`chat(LlmRequest)`).
+
+**Why reverted:** onboarding friction — asking every user to create a Gemini key at AI Studio before they can send a single message. `LlmCredentialMissingException` (428) was thrown at the top of every `chat()` for anyone without a configured key, and the wizard frontend that would let them fix it was never built, so chat was effectively dead for real users.
+
+**The pool this time:** `align.gemini.api-keys` (CSV) → `GeminiProperties.apiKeys` → `GeminiApiKeyPool` (`ai.llm.gemini`). 3-5 keys from **separate legitimate Google accounts** — deliberately not 21 projects under one account like the banned 2026-09-05 attempt, which is what drew the `403 PERMISSION_DENIED`. `GeminiLlmClient.chat` iterates `pool.shuffled()` (random order, no shared cursor → no concurrency race), retries the next key on 429/403 (logs a `warn` on 403 so the operator knows to replace a key), propagates 5xx/400 without retry, and throws `LlmUnavailableException` (503) once every key is exhausted. Fail-fast: empty `api-keys` → app won't start (same idiom as `ApiKeyCipher`). Secrets: prod via `ALIGN_GEMINI_API_KEYS` env var, CI via `application-ci.properties` dummy, dev via `application-dev.properties`.
+
+**Re-enabling BYOK** = a contained ~15-line change: `LlmClient.chat(LlmRequest, LlmApiKey)` back to two args, re-inject `LlmCredentialService` into `AgentServiceImpl`, restore the `resolve(user)` call at the top of `chat()` (as preferred source, with the pool as fallback if desired). Tests `AgentServiceImplTest` + `GeminiLlmClientTest` show both shapes in their git history.
+
+---
+
+### Historical record — BYOK as designed and built 2026-09-05 (kept for context; superseded by the dormant state above)
+
+Designed and built 2026-09-05. This replaced the operator-owned key pool, which was deleted from the codebase at the time (`GeminiApiKeyPool`, `GeminiProperties.apiKeys`, `align.gemini.api-keys` and the retry-on-429 loop) — all since **restored** in a simpler form (above). Each user brings their own Gemini API key and chats under their own free-tier quota.
 
 The reversal is evidence-driven, not a change of taste. The pooling section explicitly rejected BYOK for two reasons: it turns Align into a custodian of third-party secrets, and it adds onboarding friction before anyone can chat. What overturned it: Google started answering pooled keys with `403 PERMISSION_DENIED` ("Your project has been denied access"), i.e. the multi-project free-tier pooling degraded on its own, exactly the "concrete problem demonstrates the need" gate this roadmap applies everywhere. The two original objections didn't disappear — they got explicit answers: **the wizard is the mitigation for the friction, and encryption at rest is the mitigation for the custody**. Both are costs this feature pays deliberately.
 
@@ -597,7 +611,7 @@ Known gaps, deliberate or flagged:
 
 - **The frontend half of the error contract isn't built.** The backend now emits 428/409/429 distinctly; reacting to them (opening the wizard, showing the right copy, not opening it on 429) is frontend work. This is the one place where "backend first" was mandatory rather than a preference — without distinct statuses there is nothing for the UI to branch on.
 - **Rotating `align.crypto.secret` silently invalidates every stored key.** Handled gracefully (each user is sent back through the wizard) but not detected proactively: nobody is notified, they just hit a 428 next time they chat. Acceptable because rotation is a deliberate operator action, not something that happens on its own.
-- **`ALIGN_CRYPTO_SECRET` isn't provisioned on the VPS yet** — the app fails fast without it, by design. Joins the open secrets item in [Production deployment](#production-deployment-mvp).
+- ~~**`ALIGN_CRYPTO_SECRET` isn't provisioned on the VPS yet**~~ — resolved 2026-09-07: it's in `/etc/align/align.env` on the VPS and the app boots with it. Still not detected proactively — rotating it silently invalidates every stored key and each user just hits a 428 next chat.
 - **The operator's 21 pooled keys should be revoked at Google.** They're unreferenced now, and several were likely already banned (the 403 that triggered this whole change). They were never committed — `application-dev.properties` is gitignored — but they remain live in the account until revoked.
 - **No `LlmCredentialControllerTest`** — same precedent as every thin controller in the project.
 - **No rate limiting on `PUT /api/ai/credentials`.** Each call costs one `GET /models` against Gemini using the submitted key. Not a concern at single-digit-user scale; worth revisiting if registration ever opens up broadly.
