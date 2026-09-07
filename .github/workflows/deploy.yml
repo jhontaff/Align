@@ -35,7 +35,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           port: ${{ secrets.VPS_SSH_PORT }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: artifact/align-0.0.1-SNAPSHOT.jar
+          source: artifact/*.jar
           target: /opt/align/incoming
           strip_components: 1
 

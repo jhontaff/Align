@@ -1,0 +1,32 @@
+# Copia de referencia. Autoritativo: /etc/systemd/system/align.service en el VPS.
+# Tras editar en el VPS: sudo systemctl daemon-reload && sudo systemctl restart align
+# (y reflejar el cambio en este archivo).
+
+[Unit]
+Description=Align
+After=network.target postgresql.service
+Wants=postgresql.service
+# Si el arranque falla 4 veces en 60s, systemd se rinde y deja el unit en 'failed'
+# en vez de rebotar para siempre. El health check del deploy detecta ese estado y hace rollback.
+StartLimitIntervalSec=60
+StartLimitBurst=4
+
+[Service]
+Type=simple
+User=align
+Group=align
+WorkingDirectory=/opt/align
+# Trae los secretos (DB, JWT, VAPID, ALIGN_CRYPTO_SECRET) como variables de entorno.
+EnvironmentFile=/etc/align/align.env
+# current.jar es un symlink al release activo en /opt/align/releases/. El deploy lo repunta.
+ExecStart=/usr/bin/java -jar /opt/align/current.jar
+# Spring Boot sale con 143 al recibir SIGTERM (parada limpia) — sin esto figura como fallo.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
