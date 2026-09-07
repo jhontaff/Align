@@ -16,6 +16,8 @@ import com.jet.align.common.exception.LlmException;
 import com.jet.align.common.exception.LlmQuotaExceededException;
 import com.jet.align.common.exception.LlmUnavailableException;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -36,10 +38,13 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(prefix = "align.llm", name = "provider", havingValue = "gemini")
 public class GeminiLlmClient implements LlmClient, LlmCredentialValidator {
 
+    private static final Logger log = LoggerFactory.getLogger(GeminiLlmClient.class);
+
     private static final String API_KEY_HEADER = "x-goog-api-key";
 
     private final RestClient geminiRestClient;
     private final GeminiProperties properties;
+    private final GeminiApiKeyPool apiKeyPool;
 
     /**
      * Gemini solo soporta un subconjunto del schema OpenAPI 3.0 (no JSON
@@ -51,8 +56,35 @@ public class GeminiLlmClient implements LlmClient, LlmCredentialValidator {
     private static final Set<String> ALLOWED_SCHEMA_KEYS = Set.of(
             "type", "format", "description", "nullable", "enum", "properties", "required", "items", "propertyOrdering");
 
+    /**
+     * Recorre el pool de keys en orden aleatorio: si Gemini rechaza una por
+     * cuota (429) o acceso (401/403), prueba la siguiente. Un 5xx (Gemini
+     * caído) o un 400 (request mal armado por nosotros) NO se reintentan —
+     * otra key no cambia nada — y propagan tal cual.
+     */
     @Override
-    public LlmResponse chat(LlmRequest request, LlmApiKey apiKey) {
+    public LlmResponse chat(LlmRequest request) {
+        LlmException lastRetryable = null;
+
+        for (LlmApiKey apiKey : apiKeyPool.shuffled()) {
+            try {
+                return chatOnce(request, apiKey);
+
+            } catch (LlmQuotaExceededException e) {
+                lastRetryable = e;
+
+            } catch (LlmCredentialInvalidException e) {
+                log.warn("Gemini rechazó una API key del pool (401/403); probando la siguiente", e);
+                lastRetryable = e;
+            }
+        }
+
+        throw new LlmUnavailableException(
+                "El asistente no está disponible en este momento. Probá de nuevo en unos minutos.",
+                lastRetryable);
+    }
+
+    private LlmResponse chatOnce(LlmRequest request, LlmApiKey apiKey) {
         try {
             GeminiApi.GenerateContentResponse response = geminiRestClient.post()
                     .uri("/models/{model}:generateContent", properties.model())
@@ -65,23 +97,26 @@ public class GeminiLlmClient implements LlmClient, LlmCredentialValidator {
             return toLlmResponse(response);
 
         } catch (HttpClientErrorException.TooManyRequests e) {
-            throw new LlmQuotaExceededException(
-                    "Tu API key de Gemini agotó la cuota disponible. Probá de nuevo más tarde.", e);
+            throw new LlmQuotaExceededException("Gemini respondió 429 (límite de uso).", e);
 
         } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
-            // 401/403 señalan a la credencial sin ambigüedad. Un 400 NO se mapea
-            // acá: Gemini también devuelve 400 cuando el request está mal armado
-            // (un schema de tool inválido, por ejemplo), y culpar a la key del
-            // usuario por un bug nuestro lo mandaría a reconfigurar algo que
-            // está bien.
-            throw new LlmCredentialInvalidException(
-                    "Gemini rechazó tu API key. Volvé a configurarla.", e);
+            throw new LlmCredentialInvalidException("Gemini rechazó la API key (401/403).", e);
+
+        } catch (HttpServerErrorException.ServiceUnavailable e) {
+            // 503 "high demand": el modelo free-tier está saturado ahora mismo.
+            // Es transitorio, pero reintentar no sirve: cada intento cuesta ~18s
+            // de espera del lado de Google. Se le dice al usuario que reintente.
+            throw new LlmUnavailableException(
+                    "El asistente está con mucha demanda en este momento. Probá de nuevo en un minuto.", e);
 
         } catch (HttpServerErrorException e) {
-            throw new LlmUnavailableException(
-                    "Gemini no está disponible en este momento.", e);
+            log.warn("Gemini {} tras el request. body={}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new LlmUnavailableException("El asistente no está disponible en este momento.", e);
 
         } catch (RestClientResponseException e) {
+            // 400 y otros 4xx: normalmente un request mal armado por nosotros
+            // (un schema de tool inválido). Reintentar con otra key no ayuda.
+            log.warn("Gemini {} rechazó la solicitud. body={}", e.getStatusCode(), e.getResponseBodyAsString());
             throw new LlmException("Gemini rechazó la solicitud: " + e.getMessage(), e);
         }
     }
@@ -91,9 +126,9 @@ public class GeminiLlmClient implements LlmClient, LlmCredentialValidator {
      * que ejerce la autenticación (no consume cuota de generación) y ya detecta
      * los dos casos que importan, key inválida y proyecto sin acceso.
      *
-     * <p>Acá cualquier 4xx sí se interpreta como "la key no sirve", al revés que
-     * en {@link #chat}: este request no lleva payload que podamos haber armado
-     * mal, así que no hay otra explicación posible.
+     * <p>Sigue existiendo para el endpoint {@code /api/ai/credentials} (BYOK,
+     * dormido). Acá cualquier 4xx sí se interpreta como "la key no sirve": este
+     * request no lleva payload que podamos haber armado mal.
      */
     @Override
     public void validate(LlmApiKey apiKey) {

@@ -6,7 +6,6 @@ import com.jet.align.ai.agent.dto.AgentResponse;
 import com.jet.align.ai.agent.dto.ChatHistoryResponse;
 import com.jet.align.ai.agent.dto.ChatTurn;
 import com.jet.align.ai.agent.execution.ToolExecutionService;
-import com.jet.align.ai.credential.LlmCredentialService;
 import com.jet.align.ai.llm.*;
 import com.jet.align.ai.memory.ConversationMemory;
 import com.jet.align.ai.memory.UserMemoryService;
@@ -40,8 +39,15 @@ public class AgentServiceImpl implements AgentService {
      //Tope de vueltas del bucle
     private static final int MAX_STEPS = 8;
 
+    /**
+     * Cuántos mensajes del historial se le pasan al LLM. El historial completo
+     * se sigue guardando y sirviendo por {@code GET /api/agent/history}; esto
+     * solo acota el payload de cada request al proveedor (menos latencia, menos
+     * tokens de entrada). Número par → la ventana arranca en un turno de usuario.
+     */
+    private static final int MAX_HISTORY_MESSAGES = 20;
+
     private final LlmClient llmClient;
-    private final LlmCredentialService llmCredentialService;
     private final ToolExecutionService toolExecutionService;
     private final ToolRegistry toolRegistry;
     private final ConversationMemory conversationMemory;
@@ -50,7 +56,6 @@ public class AgentServiceImpl implements AgentService {
     private final ZoneId timezone;
 
     public AgentServiceImpl(LlmClient llmClient,
-                            LlmCredentialService llmCredentialService,
                             ToolExecutionService toolExecutionService,
                             ToolRegistry toolRegistry,
                             ConversationMemory conversationMemory,
@@ -58,7 +63,6 @@ public class AgentServiceImpl implements AgentService {
                             ObjectMapper objectMapper,
                             @Value("${align.timezone}") String timezone) {
         this.llmClient = llmClient;
-        this.llmCredentialService = llmCredentialService;
         this.toolExecutionService = toolExecutionService;
         this.toolRegistry = toolRegistry;
         this.conversationMemory = conversationMemory;
@@ -70,10 +74,6 @@ public class AgentServiceImpl implements AgentService {
     @Override
     public AgentResponse chat(String userMessage, User user) {
 
-        // BYOK: sin key configurada no hay chat. Se resuelve antes que nada
-        // para cortar el turno acá y no gastar consultas a memoria ni prompt.
-        LlmApiKey apiKey = llmCredentialService.resolve(user);
-
         LocalDateTime now = LocalDateTime.now(timezone).truncatedTo(ChronoUnit.MINUTES);
         List<String> memories = userMemoryService.list(user).stream()
                 .map(MemoryResponse::content)
@@ -84,13 +84,13 @@ public class AgentServiceImpl implements AgentService {
         UserMessage userTurn = new UserMessage(userMessage);
 
         messages.add(new SystemMessage(systemPrompt));
-        messages.addAll(conversationMemory.loadHistory(user));
+        messages.addAll(recentHistory(conversationMemory.loadHistory(user)));
         messages.add(userTurn);
 
         List<ToolSpecification> tools = buildSpecifications();
 
         for (int step = 0; step < MAX_STEPS; step++) {
-            LlmResponse response = llmClient.chat(new LlmRequest(messages, tools), apiKey);
+            LlmResponse response = llmClient.chat(new LlmRequest(messages, tools));
             AssistantMessage assistant = response.message();
 
             messages.add(assistant);
@@ -108,6 +108,14 @@ public class AgentServiceImpl implements AgentService {
 
         throw new AgentException(
                 "El agente superó el máximo de pasos (" + MAX_STEPS + ").");
+    }
+
+    /** Los últimos {@link #MAX_HISTORY_MESSAGES} mensajes del historial (o todos si hay menos). */
+    private static List<Message> recentHistory(List<Message> history) {
+        if (history.size() <= MAX_HISTORY_MESSAGES) {
+            return history;
+        }
+        return history.subList(history.size() - MAX_HISTORY_MESSAGES, history.size());
     }
 
     @Override
