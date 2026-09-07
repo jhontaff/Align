@@ -36,8 +36,9 @@ jobs:
           port: ${{ secrets.VPS_SSH_PORT }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: ./artifact/align-0.0.1-SNAPSHOT.jar
-          target: /opt/align/releases/${{ steps.rel.outputs.name }}
+          target: /opt/align/releases/
           strip_components: 1
+
 
       - name: Activate and restart
         uses: appleboy/ssh-action@v1.0.3
@@ -51,7 +52,7 @@ jobs:
             NEW=/opt/align/releases/${{ steps.rel.outputs.name }}
             CURRENT=/opt/align/current.jar
 
-            # backup de BD antes de tocar nada (Flyway migrará al arrancar)
+            mv /opt/align/releases/align-0.0.1-SNAPSHOT.jar "$NEW"
             pg_dump -U align align_db | gzip > /opt/align/backups/pre-$(date +%F-%H%M%S).sql.gz
 
             # guardar a qué apuntaba, para rollback
@@ -65,7 +66,7 @@ jobs:
 
             # health check: hasta 60s esperando UP
             for i in $(seq 1 12); do
-              if curl -fsS http://localhost:1010/actuator/health | grep -q '"status":"UP"'; then
+              if curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
                 echo "Health OK"
                 # limpiar releases viejos, dejar los últimos 5
                 ls -1t /opt/align/releases/align-*.jar | tail -n +6 | xargs -r rm -f
