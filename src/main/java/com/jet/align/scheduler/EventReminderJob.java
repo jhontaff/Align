@@ -23,7 +23,7 @@ public class EventReminderJob {
                     event.getUser(),
                     "Recordatorio",
                     "\"" + event.getTitle() + "\" comienza a las " + event.getStartAt().format(TIME_FORMAT),
-                    "/calendar");
+                    "/");
             eventService.markReminderSent(event.getId());
         }
     }
