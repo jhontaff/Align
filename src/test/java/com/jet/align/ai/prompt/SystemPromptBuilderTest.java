@@ -35,6 +35,7 @@ class SystemPromptBuilderTest {
 
         assertThat(prompt)
                 .contains("ordenados cronológicamente")
+                .contains("los hábitos solo si traen scheduledTime")
                 .contains("No inventes horas");
     }
 
