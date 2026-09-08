@@ -44,7 +44,7 @@ class EventReminderJobTest {
 
         job.run();
 
-        verify(notificationService).notify(eq(user), anyString(), contains("Reunión con Carlos"), eq("/calendar"));
+        verify(notificationService).notify(eq(user), anyString(), contains("Reunión con Carlos"), eq("/"));
         verify(eventService).markReminderSent(event.getId());
     }
 
@@ -58,8 +58,8 @@ class EventReminderJobTest {
 
         job.run();
 
-        verify(notificationService).notify(eq(firstUser), anyString(), contains("Reunión con Carlos"), eq("/calendar"));
-        verify(notificationService).notify(eq(secondUser), anyString(), contains("Dentista"), eq("/calendar"));
+        verify(notificationService).notify(eq(firstUser), anyString(), contains("Reunión con Carlos"), eq("/"));
+        verify(notificationService).notify(eq(secondUser), anyString(), contains("Dentista"), eq("/"));
         // first y second nunca se persistieron, así que sus id son null en los dos --
         // no se pueden distinguir por id acá. Lo que prueba que se procesó cada uno
         // por separado ya lo cubren los dos verify(notify) de arriba (usuario+título

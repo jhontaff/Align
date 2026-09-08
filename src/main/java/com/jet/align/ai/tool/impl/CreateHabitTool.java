@@ -31,6 +31,11 @@ public class CreateHabitTool implements Tool<HabitResponse> {
                   "type": "string",
                   "description": "Short, clear name of the habit.",
                   "maxLength": 100
+                },
+                "scheduledTime": {
+                  "type": "string",
+                  "format": "time",
+                  "description": "Optional time of day the user plans to do the habit, in HH:mm (24-hour). Only set it if the user gives a time."
                 }
               },
               "required": ["name"],

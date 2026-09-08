@@ -10,6 +10,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
@@ -29,7 +30,7 @@ class HabitServiceImplTest {
     private final User user = new User();
 
     private HabitResponse sampleResponse(UUID id, int currentStreak, int longestStreak, boolean completedToday) {
-        return new HabitResponse(id, "Meditar", currentStreak, longestStreak, completedToday, Instant.now(), Instant.now());
+        return new HabitResponse(id, "Meditar", null, currentStreak, longestStreak, completedToday, Instant.now(), Instant.now());
     }
 
     private HabitCompletion completionOn(LocalDate date) {
@@ -40,7 +41,7 @@ class HabitServiceImplTest {
 
     @Test
     void al_crear_un_habito_el_streak_inicial_es_siempre_cero() {
-        HabitRequest request = new HabitRequest("Meditar");
+        HabitRequest request = new HabitRequest("Meditar", null);
         Habit mapped = new Habit();
         HabitResponse expected = sampleResponse(UUID.randomUUID(), 0, 0, false);
 
@@ -52,6 +53,23 @@ class HabitServiceImplTest {
 
         assertThat(mapped.getUser()).isEqualTo(user);
         assertThat(response).isEqualTo(expected);
+    }
+
+    // scheduledTime es solo informativa: el service no la interpreta, solo la
+    // deja pasar al mapper tal como viene en el request (create y update).
+    @Test
+    void createHabit_delega_el_request_completo_con_scheduledTime_en_el_mapper() {
+        HabitRequest request = new HabitRequest("Meditar", LocalTime.of(7, 30));
+        Habit mapped = new Habit();
+        HabitResponse expected = sampleResponse(UUID.randomUUID(), 0, 0, false);
+
+        when(mapper.toEntity(request)).thenReturn(mapped);
+        when(habitRepository.save(mapped)).thenReturn(mapped);
+        when(mapper.toResponse(mapped, 0, 0, false)).thenReturn(expected);
+
+        service.createHabit(user, request);
+
+        verify(mapper).toEntity(request);
     }
 
     @Test
@@ -102,7 +120,7 @@ class HabitServiceImplTest {
     void updateHabit_actualiza_el_habito_via_mapper_y_recalcula_el_streak() {
         UUID id = UUID.randomUUID();
         Habit habit = new Habit();
-        HabitRequest request = new HabitRequest("Meditar 10 minutos");
+        HabitRequest request = new HabitRequest("Meditar 10 minutos", null);
         HabitResponse expected = sampleResponse(id, 2, 2, true);
         LocalDate today = LocalDate.now(ZoneId.of("UTC"));
 
@@ -121,7 +139,7 @@ class HabitServiceImplTest {
     @Test
     void updateHabit_lanza_ResourceNotFoundException_si_no_existe_o_no_es_del_usuario() {
         UUID id = UUID.randomUUID();
-        HabitRequest request = new HabitRequest("x");
+        HabitRequest request = new HabitRequest("x", null);
         when(habitRepository.findByIdAndUser(id, user)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updateHabit(user, id, request))

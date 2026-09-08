@@ -21,6 +21,7 @@ import org.springframework.data.jpa.domain.Specification;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -184,7 +185,10 @@ class TaskServiceImplTest {
     @Test
     void findTasksDueToday_delega_en_el_repository_con_la_fecha_de_hoy_y_excluye_completadas() {
         Task task = new Task();
-        LocalDate today = LocalDate.now();
+        // Misma zona con la que se construye el service (línea ~41): findTasksDueToday
+        // resuelve el día con LocalDate.now(timezone), así que el stub tiene que usar
+        // la misma o no matchea cuando la fecha local del JVM != fecha UTC.
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
         when(repository.findAllByDueDateAndStatusNot(today, TaskStatus.COMPLETED)).thenReturn(List.of(task));
 
         List<Task> dueToday = service.findTasksDueToday();

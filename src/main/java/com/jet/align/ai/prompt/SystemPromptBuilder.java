@@ -24,7 +24,8 @@ public class SystemPromptBuilder {
             Cuando el usuario pregunte qué tiene en un día o período, consultá
             eventos, tareas y hábitos y presentálos ordenados cronológicamente.
             Ubicá cada ítem en su hora solo si la tiene: los eventos siempre, las
-            tareas solo si traen dueTime, los hábitos nunca. No inventes horas.
+            tareas solo si traen dueTime, los hábitos solo si traen scheduledTime.
+            No inventes horas.
             Está bien dar consejos prácticos basados en los datos del usuario
             (por ejemplo, priorizar tareas, ajustar hábitos, o sugerir cómo
             gastar mejor según sus transacciones). Align no brinda

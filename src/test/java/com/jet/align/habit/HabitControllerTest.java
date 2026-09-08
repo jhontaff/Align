@@ -24,12 +24,12 @@ class HabitControllerTest {
     private final User user = new User();
 
     private HabitResponse sampleResponse(UUID id, int currentStreak, int longestStreak, boolean completedToday) {
-        return new HabitResponse(id, "Meditar", currentStreak, longestStreak, completedToday, Instant.now(), Instant.now());
+        return new HabitResponse(id, "Meditar", null, currentStreak, longestStreak, completedToday, Instant.now(), Instant.now());
     }
 
     @Test
     void createHabit_devuelve_201_con_el_habito_creado_por_el_service() {
-        HabitRequest request = new HabitRequest("Meditar");
+        HabitRequest request = new HabitRequest("Meditar", null);
         HabitResponse expected = sampleResponse(UUID.randomUUID(), 0, 0, false);
         when(habitService.createHabit(user, request)).thenReturn(expected);
 
@@ -65,7 +65,7 @@ class HabitControllerTest {
     @Test
     void updateHabit_devuelve_200_con_el_habito_actualizado() {
         UUID id = UUID.randomUUID();
-        HabitRequest request = new HabitRequest("Meditar 10 minutos");
+        HabitRequest request = new HabitRequest("Meditar 10 minutos", null);
         HabitResponse expected = sampleResponse(id, 2, 2, true);
         when(habitService.updateHabit(user, id, request)).thenReturn(expected);
 
