@@ -13,18 +13,23 @@ import java.util.List;
 
 public class TaskSpecifications {
 
+    private static final String DUE_DATE = "dueDate";
+    private static final String DUE_TIME = "dueTime";
+    private static final String STATUS = "status";
+
+
     public static Specification<Task> withFilter(User user, TaskFilter filter) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("user"), user));
             if (filter.status() != null) {
-                predicates.add(cb.equal(root.get("status"), filter.status()));
+                predicates.add(cb.equal(root.get(STATUS), filter.status()));
             }
             if (filter.dueFrom() != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("dueDate"), filter.dueFrom()));
+                predicates.add(cb.greaterThanOrEqualTo(root.get(DUE_DATE), filter.dueFrom()));
             }
             if (filter.dueTo() != null) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("dueDate"), filter.dueTo()));
+                predicates.add(cb.lessThanOrEqualTo(root.get(DUE_DATE), filter.dueTo()));
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
@@ -32,19 +37,29 @@ public class TaskSpecifications {
 
     public static Specification<Task> expirable(List<TaskStatus> eligibleStatuses, LocalDate today, LocalTime now) {
         return (root, query, cb) -> {
-            Predicate overdue = cb.lessThan(root.get("dueDate"), today);
+            Predicate overdue = cb.lessThan(root.get(DUE_DATE), today);
             Predicate dueTodayPastTime = cb.and(
-                    cb.equal(root.get("dueDate"), today),
-                    cb.isNotNull(root.get("dueTime")),
-                    cb.lessThan(root.get("dueTime"), now)
+                    cb.equal(root.get(DUE_DATE), today),
+                    cb.isNotNull(root.get(DUE_TIME)),
+                    cb.lessThan(root.get(DUE_TIME), now)
             );
             return cb.and(
-                    root.get("status").in(eligibleStatuses),
+                    root.get(STATUS).in(eligibleStatuses),
                     cb.or(overdue, dueTodayPastTime)
             );
         };
     }
 
+    public static Specification<Task> dueForReminder(List<TaskStatus> eligibleStatuses,
+                                                     LocalDate today, LocalTime now) {
+        return (root, query, cb) -> cb.and(
+                root.get(STATUS).in(eligibleStatuses),
+                cb.equal(root.get(DUE_DATE), today),
+                cb.isNotNull(root.get(DUE_TIME)),
+                cb.lessThanOrEqualTo(root.get(DUE_TIME), now),
+                cb.isFalse(root.get("reminderSent"))
+        );
+    }
 
     private TaskSpecifications() {}
 }

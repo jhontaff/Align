@@ -33,9 +33,13 @@ public class Task extends BaseEntity {
     @Column(nullable = false)
     private Priority priority;
 
+    @Column(nullable = false)
     private LocalDate dueDate;
 
     private LocalTime dueTime;
+
+    @Column(name = "reminder_sent", nullable = false)
+    boolean reminderSent;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)

@@ -142,8 +142,10 @@ class EventServiceImplTest {
         assertThat(captor.getValue().isReminderSent()).isFalse();
     }
 
+    // Sin reminderMinutesBefore explícito el servicio usa el default de 10 min
+    // (antes dejaba reminderAt en null = sin recordatorio).
     @Test
-    void crear_sin_reminder_deja_reminderAt_null() {
+    void crear_sin_reminder_usa_el_default_de_10_minutos() {
         LocalDateTime start = LocalDateTime.now(UTC).plusDays(1);
         EventRequest req = request(start, null, null);
         when(mapper.toEntity(req)).thenReturn(entityFrom(req));
@@ -152,7 +154,8 @@ class EventServiceImplTest {
 
         ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
         verify(eventRepository).save(captor.capture());
-        assertThat(captor.getValue().getReminderAt()).isNull();
+        assertThat(captor.getValue().getReminderAt()).isEqualTo(start.minusMinutes(10));
+        assertThat(captor.getValue().isReminderSent()).isFalse();
     }
 
     // --- getById -----------------------------------------------------------
@@ -201,8 +204,10 @@ class EventServiceImplTest {
         assertThat(existing.isReminderSent()).isFalse();
     }
 
+    // reminderMinutesBefore null en el update también cae al default de 10 min:
+    // mueve reminderAt (de -60 a -10) y por eso resetea reminderSent.
     @Test
-    void update_con_reminderMinutesBefore_null_limpia_reminderAt() {
+    void update_con_reminderMinutesBefore_null_usa_el_default_de_10_minutos() {
         UUID id = UUID.randomUUID();
         LocalDateTime start = LocalDateTime.now(UTC).plusDays(2);
 
@@ -217,7 +222,7 @@ class EventServiceImplTest {
 
         service.update(user, id, request(start, null, null));
 
-        assertThat(existing.getReminderAt()).isNull();
+        assertThat(existing.getReminderAt()).isEqualTo(start.minusMinutes(10));
         assertThat(existing.isReminderSent()).isFalse();
     }
 

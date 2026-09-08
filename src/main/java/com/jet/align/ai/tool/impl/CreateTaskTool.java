@@ -46,7 +46,7 @@ public class CreateTaskTool implements Tool<TaskResponse> {
                 "dueDate": {
                   "type": "string",
                   "format": "date",
-                  "description": "Optional due date in ISO-8601 format (YYYY-MM-DD)."
+                  "description": "Due date in ISO-8601 format (YYYY-MM-DD)."
                 },
                 "dueTime": {
                   "type": "string",
@@ -54,11 +54,10 @@ public class CreateTaskTool implements Tool<TaskResponse> {
                   "description": "Optional due time in HH:mm format (24-hour)."
                 }
               },
-              "required": ["title", "priority"],
+              "required": ["title", "priority","dueDate"],
               "additionalProperties": false
             }
             """;
-
 
     @Override
     public String name() {

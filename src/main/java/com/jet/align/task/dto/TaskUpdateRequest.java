@@ -24,6 +24,7 @@ public record TaskUpdateRequest(
         @NotNull(message = "Priority is required.")
         Priority priority,
 
+        @NotNull(message = "Due date is required.")
         LocalDate dueDate,
         LocalTime dueTime
 

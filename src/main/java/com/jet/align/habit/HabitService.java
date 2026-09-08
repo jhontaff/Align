@@ -15,4 +15,6 @@ public interface HabitService {
     HabitResponse uncompleteHabit(User user, UUID habitId);
     HabitResponse getHabitById(User user, UUID habitId);
     List<Habit> findHabitsAtRisk();
+    List<Habit> findHabitsDueForReminder();
+    void markReminded(UUID habitId);
 }

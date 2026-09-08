@@ -25,4 +25,7 @@ public interface TaskService {
     List<Task> findTasksDueToday();
     public void expireOverdueTasks();
     public void setTaskStatus(UUID id, User user, TaskStatus status);
+    List<Task> findTasksDueForReminder();
+    void markReminderSent(UUID taskId);
+
 }
