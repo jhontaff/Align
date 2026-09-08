@@ -19,8 +19,10 @@ target/
 *.iml
 *.ipr
 
+bfg-*.jar
+
 ## Properties files #
-*.properties
+*-dev.properties
 
 ##Gitignore
 /application-dev.properties
@@ -38,6 +40,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Artifacts ###
+/artifact
 
 ### Graphify ###
 graphify-out/
