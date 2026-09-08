@@ -191,4 +191,36 @@ class TaskServiceImplTest {
 
         assertThat(dueToday).containsExactly(task);
     }
+
+    // Mismo límite que getTasks arriba: TaskSpecifications.expirable(...) es un lambda,
+    // así que se stubea con any(Specification.class) -- el mock nunca evalúa el predicado
+    // real (vencida por fecha, o vence hoy con hora ya pasada). Lo que este test prueba
+    // es la mitad que sí es observable sin una consulta JPA real: que todo lo que el
+    // repositorio devuelva se marca EXPIRED y se persiste tal cual. La lógica de fecha/hora
+    // del predicado en sí queda sin cobertura unitaria -- gap reconocido, no silencioso.
+    @Test
+    void expireOverdueTasks_marca_como_expired_y_persiste_todo_lo_que_devuelve_el_repositorio() {
+        Task pending = new Task();
+        pending.setStatus(TaskStatus.PENDING);
+        Task inProgress = new Task();
+        inProgress.setStatus(TaskStatus.IN_PROGRESS);
+        List<Task> expirable = List.of(pending, inProgress);
+
+        when(repository.findAll(any(Specification.class))).thenReturn(expirable);
+
+        service.expireOverdueTasks();
+
+        assertThat(pending.getStatus()).isEqualTo(TaskStatus.EXPIRED);
+        assertThat(inProgress.getStatus()).isEqualTo(TaskStatus.EXPIRED);
+        verify(repository).saveAll(expirable);
+    }
+
+    @Test
+    void expireOverdueTasks_no_hace_nada_si_no_hay_tareas_vencidas() {
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        service.expireOverdueTasks();
+
+        verify(repository).saveAll(List.of());
+    }
 }

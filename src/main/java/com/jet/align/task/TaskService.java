@@ -23,4 +23,6 @@ public interface TaskService {
     public void deleteTask(UUID id, User user);
     Page<TaskResponse> getTasks(User user, Pageable pageable, TaskFilter filter);
     List<Task> findTasksDueToday();
+    public void expireOverdueTasks();
+    public void setTaskStatus(UUID id, User user, TaskStatus status);
 }

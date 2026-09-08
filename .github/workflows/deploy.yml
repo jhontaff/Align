@@ -58,8 +58,7 @@ jobs:
             mv "$SRC" "$NEW"
             rm -rf /opt/align/incoming
 
-            pg_dump -U align align_db | gzip > /opt/align/backups/pre-$(date +%F-%H%M%S).sql.gz
-
+            /usr/local/bin/align-backup.sh pre 5
 
             # guardar a qué apuntaba, para rollback
             if [ -L "$CURRENT" ]; then
