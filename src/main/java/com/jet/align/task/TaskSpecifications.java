@@ -1,10 +1,13 @@
 package com.jet.align.task;
 
 import com.jet.align.task.dto.TaskFilter;
+import com.jet.align.task.enums.TaskStatus;
 import com.jet.align.user.User;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,6 +29,22 @@ public class TaskSpecifications {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
+
+    public static Specification<Task> expirable(List<TaskStatus> eligibleStatuses, LocalDate today, LocalTime now) {
+        return (root, query, cb) -> {
+            Predicate overdue = cb.lessThan(root.get("dueDate"), today);
+            Predicate dueTodayPastTime = cb.and(
+                    cb.equal(root.get("dueDate"), today),
+                    cb.isNotNull(root.get("dueTime")),
+                    cb.lessThan(root.get("dueTime"), now)
+            );
+            return cb.and(
+                    root.get("status").in(eligibleStatuses),
+                    cb.or(overdue, dueTodayPastTime)
+            );
+        };
+    }
+
 
     private TaskSpecifications() {}
 }

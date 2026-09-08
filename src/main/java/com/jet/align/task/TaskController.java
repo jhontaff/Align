@@ -95,4 +95,19 @@ public class TaskController {
         );
     }
 
+    @PutMapping("/{id}/{status}")
+    public ResponseEntity<ApiResponse<Void>> setTaskStatus(
+            @PathVariable UUID id,
+            @PathVariable TaskStatus status,
+            @AuthenticationPrincipal User user
+    ) {
+        taskService.setTaskStatus(id, user, status);
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        HttpStatus.OK,
+                        "Task status updated successfully.",
+                        null
+                )
+        );
+    }
 }

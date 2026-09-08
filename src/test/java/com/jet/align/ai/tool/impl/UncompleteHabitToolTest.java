@@ -28,7 +28,7 @@ class UncompleteHabitToolTest {
 
     @Test
     void execute_convierte_habitId_de_string_a_uuid_y_delega_en_uncompleteHabit() {
-        HabitResponse expected = new HabitResponse(habitId, "Meditar", 0, 4, false, Instant.now(), Instant.now());
+        HabitResponse expected = new HabitResponse(habitId, "Meditar", null, 0, 4, false, Instant.now(), Instant.now());
         when(habitService.uncompleteHabit(user, habitId)).thenReturn(expected);
 
         ToolContext context = new ToolContext(user, Map.of("habitId", habitId.toString()));

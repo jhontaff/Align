@@ -21,6 +21,7 @@ import org.springframework.data.jpa.domain.Specification;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -184,11 +185,46 @@ class TaskServiceImplTest {
     @Test
     void findTasksDueToday_delega_en_el_repository_con_la_fecha_de_hoy_y_excluye_completadas() {
         Task task = new Task();
-        LocalDate today = LocalDate.now();
+        // Misma zona con la que se construye el service (línea ~41): findTasksDueToday
+        // resuelve el día con LocalDate.now(timezone), así que el stub tiene que usar
+        // la misma o no matchea cuando la fecha local del JVM != fecha UTC.
+        LocalDate today = LocalDate.now(ZoneId.of("UTC"));
         when(repository.findAllByDueDateAndStatusNot(today, TaskStatus.COMPLETED)).thenReturn(List.of(task));
 
         List<Task> dueToday = service.findTasksDueToday();
 
         assertThat(dueToday).containsExactly(task);
+    }
+
+    // Mismo límite que getTasks arriba: TaskSpecifications.expirable(...) es un lambda,
+    // así que se stubea con any(Specification.class) -- el mock nunca evalúa el predicado
+    // real (vencida por fecha, o vence hoy con hora ya pasada). Lo que este test prueba
+    // es la mitad que sí es observable sin una consulta JPA real: que todo lo que el
+    // repositorio devuelva se marca EXPIRED y se persiste tal cual. La lógica de fecha/hora
+    // del predicado en sí queda sin cobertura unitaria -- gap reconocido, no silencioso.
+    @Test
+    void expireOverdueTasks_marca_como_expired_y_persiste_todo_lo_que_devuelve_el_repositorio() {
+        Task pending = new Task();
+        pending.setStatus(TaskStatus.PENDING);
+        Task inProgress = new Task();
+        inProgress.setStatus(TaskStatus.IN_PROGRESS);
+        List<Task> expirable = List.of(pending, inProgress);
+
+        when(repository.findAll(any(Specification.class))).thenReturn(expirable);
+
+        service.expireOverdueTasks();
+
+        assertThat(pending.getStatus()).isEqualTo(TaskStatus.EXPIRED);
+        assertThat(inProgress.getStatus()).isEqualTo(TaskStatus.EXPIRED);
+        verify(repository).saveAll(expirable);
+    }
+
+    @Test
+    void expireOverdueTasks_no_hace_nada_si_no_hay_tareas_vencidas() {
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+
+        service.expireOverdueTasks();
+
+        verify(repository).saveAll(List.of());
     }
 }

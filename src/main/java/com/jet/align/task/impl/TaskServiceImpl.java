@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
@@ -95,6 +96,29 @@ public class TaskServiceImpl implements TaskService {
     @Transactional(readOnly = true)
     public List<Task> findTasksDueToday() {
         return repository.findAllByDueDateAndStatusNot(LocalDate.now(timezone), TaskStatus.COMPLETED);
+    }
+
+    @Override
+    @Transactional
+    public void expireOverdueTasks() {
+        List<Task> tasks = repository.findAll(TaskSpecifications.expirable(
+                List.of(TaskStatus.PENDING, TaskStatus.IN_PROGRESS),
+                LocalDate.now(timezone),
+                LocalTime.now(timezone)));
+        tasks.forEach(t -> t.setStatus(TaskStatus.EXPIRED));
+        repository.saveAll(tasks);
+    }
+
+
+    @Override
+    @Transactional
+    public void setTaskStatus(UUID id, User user, TaskStatus status) {
+        Task task = repository.findByIdAndUser(id, user)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                TASK_NOT_FOUND_MESSAGE + id));
+        task.setStatus(status);
+        repository.save(task);
     }
 
 }
