@@ -45,6 +45,16 @@ public class TaskSpecifications {
         };
     }
 
+    public static Specification<Task> dueForReminder(List<TaskStatus> eligibleStatuses,
+                                                     LocalDate today, LocalTime now) {
+        return (root, query, cb) -> cb.and(
+                root.get("status").in(eligibleStatuses),
+                cb.equal(root.get("dueDate"), today),
+                cb.isNotNull(root.get("dueTime")),
+                cb.lessThanOrEqualTo(root.get("dueTime"), now),
+                cb.isFalse(root.get("reminderSent"))
+        );
+    }
 
     private TaskSpecifications() {}
 }

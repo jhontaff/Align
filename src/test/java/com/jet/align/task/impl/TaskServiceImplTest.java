@@ -1,5 +1,6 @@
 package com.jet.align.task.impl;
 
+import com.jet.align.common.exception.BusinessException;
 import com.jet.align.common.exception.ResourceNotFoundException;
 import com.jet.align.task.Task;
 import com.jet.align.task.TaskMapper;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -154,7 +156,7 @@ class TaskServiceImplTest {
     void updateTask_lanza_ResourceNotFoundException_si_no_existe_o_no_es_del_usuario() {
         UUID id = UUID.randomUUID();
         TaskUpdateRequest request = new TaskUpdateRequest(
-                "x", "y", TaskStatus.PENDING, Priority.LOW, null, null);
+                "x", "y", TaskStatus.PENDING, Priority.LOW, LocalDate.of(2026, 8, 26), null);
         when(repository.findByIdAndUser(id, user)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updateTask(id, request, user))
@@ -182,14 +184,17 @@ class TaskServiceImplTest {
         verify(repository, never()).delete(any(Task.class));
     }
 
+    // El digest de las 18:00 ahora trae SOLO tareas sin hora: las que tienen dueTime
+    // reciben su push puntual desde TaskReminderJob y no queremos el duplicado acá.
     @Test
-    void findTasksDueToday_delega_en_el_repository_con_la_fecha_de_hoy_y_excluye_completadas() {
+    void findTasksDueToday_delega_con_la_fecha_de_hoy_y_excluye_completadas_y_las_que_tienen_hora() {
         Task task = new Task();
         // Misma zona con la que se construye el service (línea ~41): findTasksDueToday
         // resuelve el día con LocalDate.now(timezone), así que el stub tiene que usar
         // la misma o no matchea cuando la fecha local del JVM != fecha UTC.
         LocalDate today = LocalDate.now(ZoneId.of("UTC"));
-        when(repository.findAllByDueDateAndStatusNot(today, TaskStatus.COMPLETED)).thenReturn(List.of(task));
+        when(repository.findAllByDueDateAndDueTimeIsNullAndStatusNot(today, TaskStatus.COMPLETED))
+                .thenReturn(List.of(task));
 
         List<Task> dueToday = service.findTasksDueToday();
 
@@ -226,5 +231,109 @@ class TaskServiceImplTest {
         service.expireOverdueTasks();
 
         verify(repository).saveAll(List.of());
+    }
+
+    // dueDate es obligatoria: el path REST lo cubre @Valid, pero el path del AI tool
+    // (CreateTaskTool -> convertValue -> createTask) saltea bean validation, así que
+    // requireDueDate defiende ahí. BusinessException (no IllegalArgumentException)
+    // para que AgentServiceImpl.runTool la convierta en un {"error": ...} limpio.
+    @Test
+    void createTask_lanza_BusinessException_si_falta_la_fecha_de_vencimiento() {
+        TaskRequest request = new TaskRequest(
+                "Comprar leche", "Ir al super", Priority.MEDIUM, null, null);
+
+        assertThatThrownBy(() -> service.createTask(request, user))
+                .isInstanceOf(BusinessException.class);
+        verify(mapper, never()).toEntity(any());
+    }
+
+    @Test
+    void updateTask_lanza_BusinessException_si_falta_la_fecha_de_vencimiento() {
+        TaskUpdateRequest request = new TaskUpdateRequest(
+                "x", "y", TaskStatus.PENDING, Priority.LOW, null, null);
+
+        assertThatThrownBy(() -> service.updateTask(UUID.randomUUID(), request, user))
+                .isInstanceOf(BusinessException.class);
+        verify(repository, never()).findByIdAndUser(any(), any());
+    }
+
+    // Mismo límite que expireOverdueTasks: dueForReminder(...) es un lambda, se stubea
+    // con any(Specification.class). El predicado real (dueDate == hoy, dueTime <= ahora,
+    // !reminderSent) queda sin cobertura unitaria -- candidato a integration test.
+    @Test
+    void findTasksDueForReminder_delega_en_findAll_con_specification() {
+        Task task = new Task();
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of(task));
+
+        assertThat(service.findTasksDueForReminder()).containsExactly(task);
+    }
+
+    @Test
+    void markReminderSent_marca_la_tarea_como_notificada_y_persiste() {
+        UUID id = UUID.randomUUID();
+        Task task = new Task();
+        when(repository.findById(id)).thenReturn(Optional.of(task));
+
+        service.markReminderSent(id);
+
+        assertThat(task.isReminderSent()).isTrue();
+        verify(repository).save(task);
+    }
+
+    @Test
+    void markReminderSent_lanza_ResourceNotFoundException_si_la_tarea_no_existe() {
+        UUID id = UUID.randomUUID();
+        when(repository.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.markReminderSent(id))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // Editar la agenda (dueDate o dueTime) re-arma el recordatorio: si ya se había
+    // enviado, vuelve a quedar pendiente para la nueva hora. mapper.updateEntity es
+    // mock, así que se simula la mutación con doAnswer para ejercitar la comparación
+    // de reArmReminderIfDueChanged.
+    @Test
+    void updateTask_rearma_el_recordatorio_si_cambia_la_agenda() {
+        UUID id = UUID.randomUUID();
+        Task task = new Task();
+        task.setDueDate(LocalDate.of(2026, 9, 10));
+        task.setDueTime(LocalTime.of(14, 0));
+        task.setReminderSent(true);
+        TaskUpdateRequest request = new TaskUpdateRequest(
+                "t", "d", TaskStatus.PENDING, Priority.MEDIUM,
+                LocalDate.of(2026, 9, 10), LocalTime.of(9, 0));
+
+        when(repository.findByIdAndUser(id, user)).thenReturn(Optional.of(task));
+        when(repository.save(task)).thenReturn(task);
+        doAnswer(inv -> {
+            Task target = inv.getArgument(1);
+            target.setDueTime(LocalTime.of(9, 0));
+            return null;
+        }).when(mapper).updateEntity(request, task);
+
+        service.updateTask(id, request, user);
+
+        assertThat(task.isReminderSent()).isFalse();
+    }
+
+    @Test
+    void updateTask_no_rearma_el_recordatorio_si_la_agenda_no_cambia() {
+        UUID id = UUID.randomUUID();
+        Task task = new Task();
+        task.setDueDate(LocalDate.of(2026, 9, 10));
+        task.setDueTime(LocalTime.of(14, 0));
+        task.setReminderSent(true);
+        TaskUpdateRequest request = new TaskUpdateRequest(
+                "nuevo titulo", "d", TaskStatus.PENDING, Priority.MEDIUM,
+                LocalDate.of(2026, 9, 10), LocalTime.of(14, 0));
+
+        when(repository.findByIdAndUser(id, user)).thenReturn(Optional.of(task));
+        when(repository.save(task)).thenReturn(task);
+        // mapper.updateEntity es mock: no muta dueDate/dueTime -> siguen igual
+
+        service.updateTask(id, request, user);
+
+        assertThat(task.isReminderSent()).isTrue();
     }
 }

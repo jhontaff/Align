@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 
 @Entity
@@ -23,9 +24,10 @@ public class Habit extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    // Hora del día a la que el usuario planea hacer el hábito. Solo informativa:
-    // el agente la usa para ubicar el hábito en su hora en la vista unificada.
-    // Nullable -- un hábito sin hora sigue siendo válido (se hace en cualquier momento).
     private LocalTime scheduledTime;
+
+
+    @Column(name = "last_reminded_on")
+    private LocalDate lastRemindedOn;
 
 }

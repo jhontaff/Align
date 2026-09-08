@@ -45,7 +45,6 @@ class TaskExpirationIntegrationTest extends AbstractIntegrationTest {
         Task overduePending = persist(TaskStatus.PENDING, LocalDate.now().minusDays(1), null);
         Task overdueInProgress = persist(TaskStatus.IN_PROGRESS, LocalDate.now().minusDays(3), null);
         Task dueTomorrow = persist(TaskStatus.PENDING, LocalDate.now().plusDays(1), null);
-        Task undated = persist(TaskStatus.PENDING, null, null);
         Task overdueButCompleted = persist(TaskStatus.COMPLETED, LocalDate.now().minusDays(5), null);
 
         taskService.expireOverdueTasks();
@@ -53,7 +52,6 @@ class TaskExpirationIntegrationTest extends AbstractIntegrationTest {
         assertThat(statusOf(overduePending)).isEqualTo(TaskStatus.EXPIRED);
         assertThat(statusOf(overdueInProgress)).isEqualTo(TaskStatus.EXPIRED);
         assertThat(statusOf(dueTomorrow)).isEqualTo(TaskStatus.PENDING);
-        assertThat(statusOf(undated)).isEqualTo(TaskStatus.PENDING);
         assertThat(statusOf(overdueButCompleted)).isEqualTo(TaskStatus.COMPLETED);
     }
 

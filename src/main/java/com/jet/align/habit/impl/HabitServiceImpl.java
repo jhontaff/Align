@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
@@ -143,6 +144,31 @@ public class HabitServiceImpl implements HabitService {
                     return !isCompletedToday(completions) && calculateStreak(completions) > 0;
                 })
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Habit> findHabitsDueForReminder() {
+        LocalDate today = LocalDate.now(timezone);
+        LocalTime now = LocalTime.now(timezone);
+        return habitRepository.findAll().stream()
+                .filter(habit -> habit.getScheduledTime() != null)
+                .filter(habit -> !habit.getScheduledTime().isAfter(now))
+                .filter(habit -> !today.equals(habit.getLastRemindedOn()))
+                .filter(habit -> {
+                    List<HabitCompletion> completions = habitCompletionRepository.findByHabitOrderByDateDesc(habit);
+                    return !isCompletedToday(completions);
+                })
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void markReminded(UUID habitId) {
+        Habit habit = habitRepository.findById(habitId)
+                .orElseThrow(() -> new ResourceNotFoundException(HABIT_NOT_FOUND_MESSAGE + habitId));
+        habit.setLastRemindedOn(LocalDate.now(timezone));
+        habitRepository.save(habit);
     }
 
     private int calculateStreak(List<HabitCompletion> completions) {

@@ -17,7 +17,24 @@ class SchemaIntegrationTest extends AbstractIntegrationTest {
         Integer applied = jdbc.queryForObject(
                 "SELECT count(*) FROM flyway_schema_history WHERE success = true", Integer.class);
 
-        assertThat(applied).isGreaterThanOrEqualTo(15);
+        assertThat(applied).isGreaterThanOrEqualTo(18);
+    }
+
+    // ddl-auto=validate checks column existence and type, never nullability, so a
+    // migration that fails to apply a NOT NULL (or forgets it) never breaks startup.
+    // V17 tightened tasks.due_date; V16 added tasks.reminder_sent NOT NULL.
+    @Test
+    void tasksDueDateAndReminderSentAreNotNull() {
+        assertThat(isNullable("tasks", "due_date")).isEqualTo("NO");
+        assertThat(isNullable("tasks", "reminder_sent")).isEqualTo("NO");
+    }
+
+    private String isNullable(String table, String column) {
+        return jdbc.queryForObject("""
+                SELECT is_nullable
+                FROM information_schema.columns
+                WHERE table_name = ? AND column_name = ?
+                """, String.class, table, column);
     }
 
     @Test

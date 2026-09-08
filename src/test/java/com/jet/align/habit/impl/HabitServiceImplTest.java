@@ -18,6 +18,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -406,5 +407,96 @@ class HabitServiceImplTest {
         List<Habit> atRisk = service.findHabitsAtRisk();
 
         assertThat(atRisk).isEmpty();
+    }
+
+    // findHabitsDueForReminder compara scheduledTime contra LocalTime.now(timezone),
+    // así que las horas del test se derivan de la hora real +/- 1 min (mismo idioma
+    // que TaskExpirationIntegrationTest). Cerca de medianoche UTC el +/- 1 min cruza
+    // el borde del día y la comparación deja de ser determinista -> se saltea.
+    private void assumeNotNearMidnightUtc() {
+        LocalTime now = LocalTime.now(ZoneId.of("UTC"));
+        assumeTrue(now.isAfter(LocalTime.of(0, 5)) && now.isBefore(LocalTime.of(23, 55)),
+                "skipped within 5 min of midnight UTC to keep the scheduledTime boundary deterministic");
+    }
+
+    private Habit habitDueForReminder(LocalTime scheduledTime, LocalDate lastRemindedOn) {
+        Habit habit = new Habit();
+        habit.setUser(user);
+        habit.setName("Meditar");
+        habit.setScheduledTime(scheduledTime);
+        habit.setLastRemindedOn(lastRemindedOn);
+        return habit;
+    }
+
+    @Test
+    void findHabitsDueForReminder_incluye_habito_con_hora_pasada_no_completado_ni_recordado_hoy() {
+        assumeNotNearMidnightUtc();
+        Habit habit = habitDueForReminder(LocalTime.now(ZoneId.of("UTC")).minusMinutes(1), null);
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit)).thenReturn(List.of());
+
+        assertThat(service.findHabitsDueForReminder()).containsExactly(habit);
+    }
+
+    @Test
+    void findHabitsDueForReminder_excluye_habito_sin_hora() {
+        Habit habit = habitDueForReminder(null, null);
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+
+        assertThat(service.findHabitsDueForReminder()).isEmpty();
+        verify(habitCompletionRepository, never()).findByHabitOrderByDateDesc(any());
+    }
+
+    @Test
+    void findHabitsDueForReminder_excluye_habito_con_hora_todavia_futura() {
+        assumeNotNearMidnightUtc();
+        Habit habit = habitDueForReminder(LocalTime.now(ZoneId.of("UTC")).plusMinutes(1), null);
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+
+        assertThat(service.findHabitsDueForReminder()).isEmpty();
+        verify(habitCompletionRepository, never()).findByHabitOrderByDateDesc(any());
+    }
+
+    @Test
+    void findHabitsDueForReminder_excluye_habito_ya_recordado_hoy() {
+        assumeNotNearMidnightUtc();
+        Habit habit = habitDueForReminder(
+                LocalTime.now(ZoneId.of("UTC")).minusMinutes(1), LocalDate.now(ZoneId.of("UTC")));
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+
+        assertThat(service.findHabitsDueForReminder()).isEmpty();
+        verify(habitCompletionRepository, never()).findByHabitOrderByDateDesc(any());
+    }
+
+    @Test
+    void findHabitsDueForReminder_excluye_habito_ya_completado_hoy() {
+        assumeNotNearMidnightUtc();
+        Habit habit = habitDueForReminder(LocalTime.now(ZoneId.of("UTC")).minusMinutes(1), null);
+        when(habitRepository.findAll()).thenReturn(List.of(habit));
+        when(habitCompletionRepository.findByHabitOrderByDateDesc(habit))
+                .thenReturn(List.of(completionOn(LocalDate.now(ZoneId.of("UTC")))));
+
+        assertThat(service.findHabitsDueForReminder()).isEmpty();
+    }
+
+    @Test
+    void markReminded_setea_lastRemindedOn_hoy_y_persiste() {
+        UUID id = UUID.randomUUID();
+        Habit habit = new Habit();
+        when(habitRepository.findById(id)).thenReturn(Optional.of(habit));
+
+        service.markReminded(id);
+
+        assertThat(habit.getLastRemindedOn()).isEqualTo(LocalDate.now(ZoneId.of("UTC")));
+        verify(habitRepository).save(habit);
+    }
+
+    @Test
+    void markReminded_lanza_ResourceNotFoundException_si_el_habito_no_existe() {
+        UUID id = UUID.randomUUID();
+        when(habitRepository.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.markReminded(id))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

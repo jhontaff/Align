@@ -27,6 +27,7 @@ public class EventServiceImpl implements EventService {
 
     EventRepository eventRepository;
     EventMapper mapper;
+    private static final int DEFAULT_REMINDER_MINUTES_BEFORE = 10;
     private static final String EVENT_NOT_FOUND_MESSAGE = "Event not found with id: ";
     private final ZoneId timezone;
 
@@ -117,7 +118,7 @@ public class EventServiceImpl implements EventService {
 
     private void applyReminder(Event event) {
         if (event.getReminderMinutesBefore() == null) {
-            event.setReminderAt(null);
+            event.setReminderAt(event.getStartAt().minusMinutes(DEFAULT_REMINDER_MINUTES_BEFORE));
             event.setReminderSent(false);
             return;
         }
