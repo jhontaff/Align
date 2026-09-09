@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jet.align.notification.PushSubscription;
 import com.jet.align.notification.PushSubscriptionRepository;
 import com.jet.align.user.User;
+import nl.martijndwars.webpush.Encoding;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
 import org.apache.http.HttpResponse;
@@ -16,6 +17,7 @@ import java.security.Security;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class NotificationServiceImplTest {
@@ -61,11 +63,11 @@ class NotificationServiceImplTest {
     void notify_envia_el_push_a_cada_suscripcion_del_usuario() throws Exception {
         PushSubscription subscription = subscriptionOf("https://push.example/1");
         when(repository.findByUser(user)).thenReturn(List.of(subscription));
-        when(pushService.send(any(Notification.class))).thenReturn(responseWithStatus(201));
+        when(pushService.send(any(Notification.class), eq(Encoding.AES128GCM))).thenReturn(responseWithStatus(201));
 
         service.notify(user, "Título", "Cuerpo", "/habits");
 
-        verify(pushService).send(any(Notification.class));
+        verify(pushService).send(any(Notification.class), eq(Encoding.AES128GCM));
         verify(repository, never()).delete(any());
     }
 
@@ -73,7 +75,7 @@ class NotificationServiceImplTest {
     void notify_borra_la_suscripcion_cuando_el_push_service_responde_410() throws Exception {
         PushSubscription subscription = subscriptionOf("https://push.example/1");
         when(repository.findByUser(user)).thenReturn(List.of(subscription));
-        when(pushService.send(any(Notification.class))).thenReturn(responseWithStatus(410));
+        when(pushService.send(any(Notification.class), eq(Encoding.AES128GCM))).thenReturn(responseWithStatus(410));
 
         service.notify(user, "Título", "Cuerpo", "/habits");
 
@@ -84,7 +86,7 @@ class NotificationServiceImplTest {
     void notify_borra_la_suscripcion_cuando_el_push_service_responde_404() throws Exception {
         PushSubscription subscription = subscriptionOf("https://push.example/1");
         when(repository.findByUser(user)).thenReturn(List.of(subscription));
-        when(pushService.send(any(Notification.class))).thenReturn(responseWithStatus(404));
+        when(pushService.send(any(Notification.class), eq(Encoding.AES128GCM))).thenReturn(responseWithStatus(404));
 
         service.notify(user, "Título", "Cuerpo", "/habits");
 
@@ -95,7 +97,7 @@ class NotificationServiceImplTest {
     void notify_no_borra_la_suscripcion_cuando_el_envio_es_exitoso() throws Exception {
         PushSubscription subscription = subscriptionOf("https://push.example/1");
         when(repository.findByUser(user)).thenReturn(List.of(subscription));
-        when(pushService.send(any(Notification.class))).thenReturn(responseWithStatus(201));
+        when(pushService.send(any(Notification.class), eq(Encoding.AES128GCM))).thenReturn(responseWithStatus(201));
 
         service.notify(user, "Título", "Cuerpo", "/habits");
 
@@ -107,12 +109,12 @@ class NotificationServiceImplTest {
         PushSubscription failing = subscriptionOf("https://push.example/failing");
         PushSubscription ok = subscriptionOf("https://push.example/ok");
         when(repository.findByUser(user)).thenReturn(List.of(failing, ok));
-        when(pushService.send(any(Notification.class)))
+        when(pushService.send(any(Notification.class), eq(Encoding.AES128GCM)))
                 .thenThrow(new RuntimeException("network error"))
                 .thenReturn(responseWithStatus(201));
 
         service.notify(user, "Título", "Cuerpo", "/habits");
 
-        verify(pushService, times(2)).send(any(Notification.class));
+        verify(pushService, times(2)).send(any(Notification.class), eq(Encoding.AES128GCM));
     }
 }
