@@ -8,12 +8,16 @@ import com.jet.align.notification.PushSubscriptionRepository;
 import com.jet.align.user.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.martijndwars.webpush.Encoding;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
 import org.apache.http.HttpResponse;
+import org.apache.http.util.EntityUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -33,7 +37,9 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional
     public void notify(User user, String title, String body, String url) {
         String payload = buildPayload(title, body, url);
-        for (PushSubscription subscription : pushSubscriptionRepository.findByUser(user)) {
+        List<PushSubscription> subs = pushSubscriptionRepository.findByUser(user);
+        log.info("notify user={} subs={} title=\"{}\"", user.getId(), subs.size(), title);
+        for (PushSubscription subscription : subs) {
             send(subscription, payload);
         }
     }
@@ -45,10 +51,19 @@ public class NotificationServiceImpl implements NotificationService {
                     subscription.getP256dh(),
                     subscription.getAuth(),
                     payload);
-            HttpResponse response = pushService.send(notification);
+            HttpResponse response = pushService.send(notification, Encoding.AES128GCM);
             int status = response.getStatusLine().getStatusCode();
+            String responseBody = response.getEntity() != null
+                    ? EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8)
+                    : "";
+
             if (status == STATUS_NOT_FOUND || status == STATUS_GONE) {
+                log.warn("push {} -> {} (Gone); elimino suscripción", subscription.getId(), status);
                 pushSubscriptionRepository.delete(subscription);
+            } else if (status >= 300) {
+                log.error("push {} -> {} body={}", subscription.getId(), status, responseBody);
+            } else {
+                log.info("push {} -> {}", subscription.getId(), status);
             }
         } catch (Exception e) {
             log.error("No se pudo enviar el push a la suscripción {} (endpoint={})",
