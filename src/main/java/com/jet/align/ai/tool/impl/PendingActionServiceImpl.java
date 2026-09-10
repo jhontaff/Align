@@ -41,12 +41,16 @@ public class PendingActionServiceImpl implements PendingActionService {
     @Transactional
     public ToolResult<?> confirm(User user, UUID id) {
         PendingAction pending = repository.findByIdAndUser(id, user).
-                orElseThrow(() -> new ResourceNotFoundException("Pending action not found: " + id));
+                orElseThrow(() -> new ResourceNotFoundException("No se encontró la acción pendiente: " + id));
         if (pending.getStatus() != PendingActionStatus.PENDING) {
-            throw new BusinessException("This pending action was already " + pending.getStatus() + ".");
+            // El enum queda entre paréntesis, como dato, en vez de incrustado en la
+            // gramática de la frase: "ya fue CONFIRMED" no se puede redactar en español.
+            throw new BusinessException("La acción pendiente ya fue resuelta (" + pending.getStatus() + ").");
         }
         Tool<?> tool = toolRegistry.get(pending.getToolName())
-                .orElseThrow(() -> new ResourceNotFoundException("Unknown tool: " + pending.getToolName()));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "La acción pendiente usa una herramienta que ya no está disponible: "
+                                + pending.getToolName()));
 
         ToolResult<?> result = tool.execute(new ToolContext(user, deserialize(pending.getArgumentsJson())));
         pending.setStatus(PendingActionStatus.CONFIRMED);
@@ -80,9 +84,11 @@ public class PendingActionServiceImpl implements PendingActionService {
     @Transactional
     public void reject(User user, UUID id) {
         PendingAction pending = repository.findByIdAndUser(id, user)
-                .orElseThrow(() -> new ResourceNotFoundException("Pending action not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("No se encontró la acción pendiente: " + id));
         if (pending.getStatus() != PendingActionStatus.PENDING) {
-            throw new BusinessException("This pending action was already " + pending.getStatus() + ".");
+            // El enum queda entre paréntesis, como dato, en vez de incrustado en la
+            // gramática de la frase: "ya fue CONFIRMED" no se puede redactar en español.
+            throw new BusinessException("La acción pendiente ya fue resuelta (" + pending.getStatus() + ").");
         }
         pending.setStatus(PendingActionStatus.REJECTED);
         repository.save(pending);

@@ -23,8 +23,8 @@ public class TaskReminderJob {
         for (Task task : taskService.findTasksDueForReminder()) {
             notificationService.notify(
                     task.getUser(),
-                    "Tarea",
-                    "\"" + task.getTitle() + "\" vence a las " + task.getDueTime().format(TIME_FORMAT),
+                    "Recordatorio de tarea",
+                    "\"" + task.getTitle() + "\"  a las " + task.getDueTime().format(TIME_FORMAT),
                     "/tasks");
             taskService.markReminderSent(task.getId());
         }

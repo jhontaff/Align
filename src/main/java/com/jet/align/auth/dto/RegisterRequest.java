@@ -8,32 +8,32 @@ import jakarta.validation.constraints.Size;
 
 public record RegisterRequest(
 
-        @NotBlank
-        @Email
+        @NotBlank(message = "El correo electrónico es obligatorio.")
+        @Email(message = "El correo electrónico no tiene un formato válido.")
         String email,
 
-        @NotBlank
-        @Size(min = 8, max = 25)
+        @NotBlank(message = "La contraseña es obligatoria.")
+        @Size(min = 8, max = 25, message = "La contraseña debe tener entre 8 y 25 caracteres.")
         @Pattern(
                 regexp = "(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).*",
-                message = "Password must contain at least one lowercase letter, one uppercase letter, and one digit."
+                message = "La contraseña debe incluir al menos una minúscula, una mayúscula y un número."
         )
         String password,
 
-        @NotBlank
+        @NotBlank(message = "La confirmación de la contraseña es obligatoria.")
         String confirmPassword,
 
-        @NotBlank
-        @Size(max = 100)
+        @NotBlank(message = "El nombre es obligatorio.")
+        @Size(max = 100, message = "El nombre no puede superar los 100 caracteres.")
         String firstName,
 
-        @NotBlank
-        @Size(max = 100)
+        @NotBlank(message = "El apellido es obligatorio.")
+        @Size(max = 100, message = "El apellido no puede superar los 100 caracteres.")
         String lastName
 
 ) {
 
-        @AssertTrue(message = "Password and confirmation must match.")
+        @AssertTrue(message = "La contraseña y su confirmación no coinciden.")
         public boolean isPasswordConfirmed() {
                 return password != null && password.equals(confirmPassword);
         }

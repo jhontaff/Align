@@ -10,14 +10,14 @@ import java.time.LocalDate;
 
 public record TransactionUpdateRequest(
 
-        @NotNull(message = "Amount is required.")
-        @Positive(message = "Amount must be greater than zero.")
+        @NotNull(message = "El monto es obligatorio.")
+        @Positive(message = "El monto debe ser mayor que cero.")
         BigDecimal amount,
-        @NotNull(message = "Category is required.")
+        @NotNull(message = "La categoría es obligatoria.")
         Category category,
-        @Size(max = 255, message = "Description cannot exceed 255 characters.")
+        @Size(max = 255, message = "La descripción no puede superar los 255 caracteres.")
         String description,
-        @NotNull(message = "Date is required.")
+        @NotNull(message = "La fecha es obligatoria.")
         LocalDate date
 ) {
 }

@@ -28,7 +28,7 @@ public class EventServiceImpl implements EventService {
     EventRepository eventRepository;
     EventMapper mapper;
     private static final int DEFAULT_REMINDER_MINUTES_BEFORE = 10;
-    private static final String EVENT_NOT_FOUND_MESSAGE = "Event not found with id: ";
+    private static final String EVENT_NOT_FOUND_MESSAGE = "No se encontró el evento con id: ";
     private final ZoneId timezone;
 
 
@@ -109,10 +109,10 @@ public class EventServiceImpl implements EventService {
 
     private void validate(EventRequest request) {
         if (request.startAt()==null) {
-            throw new BusinessException("Start time is required");
+            throw new BusinessException("La fecha y hora de inicio son obligatorias.");
         }
         if(request.endAt() != null && !request.endAt().isAfter(request.startAt())) {
-            throw new BusinessException("End time must be after start time");
+            throw new BusinessException("La fecha y hora de fin deben ser posteriores a las de inicio.");
         }
     }
 

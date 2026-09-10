@@ -32,7 +32,7 @@ public class AuthServiceImpl implements AuthService {
 
     public AuthResponse register(RegisterRequest request) {
         if(userRepository.existsByEmail(request.email())) {
-            throw new BusinessException("Email is already in use.");
+            throw new BusinessException("El correo electrónico ya está registrado.");
         }
 
         User user = userMapper.toEntity(request);

@@ -29,7 +29,7 @@ public class TransactionServiceImpl implements TransactionService {
     private static final int MIN_MONTHS_FLOOR = 3;
     private static final int DEFAULT_WINDOW_MONTHS = 12;
     private static final int MAX_SPAN_MONTHS = 36;
-    private static final String TRANSACTION_NOT_FOUND_MESSAGE = "Transaction not found with id: ";
+    private static final String TRANSACTION_NOT_FOUND_MESSAGE = "No se encontró la transacción con id: ";
 
     private final ZoneId timezone;
     private final TransactionRepository repository;
@@ -101,7 +101,7 @@ public class TransactionServiceImpl implements TransactionService {
         LocalDate rangeFrom = from != null ? from : YearMonth.now(timezone).atDay(1);
         LocalDate rangeTo = to != null ? to : YearMonth.now(timezone).atEndOfMonth();
         if (rangeFrom.isAfter(rangeTo)) {
-            throw new BusinessException("The 'from' date cannot be after the 'to' date.");
+            throw new BusinessException("La fecha inicial no puede ser posterior a la fecha final.");
         }
         TransactionFilter filter = new TransactionFilter(null, null, rangeFrom, rangeTo);
         List<Transaction> transactions = repository.findAll(TransactionSpecifications.withFilter(user, filter));
@@ -116,10 +116,10 @@ public class TransactionServiceImpl implements TransactionService {
         YearMonth to = filter.to() != null ? filter.to() : YearMonth.now(timezone);
         YearMonth from = resolveMonth(filter, user, to);
         if (from.isAfter(to)) {
-            throw new BusinessException("The 'from' month cannot be after the 'to' month.");
+            throw new BusinessException("El mes inicial no puede ser posterior al mes final.");
         }
         if (ChronoUnit.MONTHS.between(from, to) >= MAX_SPAN_MONTHS) {
-            throw new BusinessException("The span between 'from' and 'to' months cannot exceed " + MAX_SPAN_MONTHS + " months.");
+            throw new BusinessException("El rango consultado no puede superar los " + MAX_SPAN_MONTHS + " meses.");
         }
         TransactionFilter rangeFilter = new TransactionFilter(
                 filter.type(), filter.category(), from.atDay(1), to.atEndOfMonth());

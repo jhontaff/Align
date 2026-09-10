@@ -25,7 +25,7 @@ import java.util.UUID;
 @Service
 @Transactional(readOnly = true)
 public class TaskServiceImpl implements TaskService {
-    private static final String TASK_NOT_FOUND_MESSAGE = "Task not found with id: ";
+    private static final String TASK_NOT_FOUND_MESSAGE = "No se encontró la tarea con id: ";
     
     private final TaskRepository repository;
     private final TaskMapper mapper;
@@ -150,7 +150,7 @@ public class TaskServiceImpl implements TaskService {
 
     private void requireDueDate(LocalDate dueDate) {
         if (dueDate == null) {
-            throw new BusinessException("Due date is required.");
+            throw new BusinessException("La fecha de vencimiento es obligatoria.");
         }
     }
 

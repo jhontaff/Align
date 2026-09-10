@@ -127,7 +127,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(
                         HttpStatus.INTERNAL_SERVER_ERROR,
-                        "Unexpected internal server error."
+                        "Ocurrió un error inesperado. Intente de nuevo más tarde."
                 ));
     }
 
@@ -144,7 +144,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(ApiResponse.error(
                         HttpStatus.BAD_REQUEST,
-                        "Validation failed.",
+                        "Hay campos con errores de validación.",
                         errors
                 ));
     }
@@ -154,7 +154,7 @@ public class GlobalExceptionHandler {
                 .badRequest()
                 .body(ApiResponse.error(
                         HttpStatus.BAD_REQUEST,
-                        "Business error: " + ex.getMessage()
+                        ex.getMessage()
                 ));
     }
 
@@ -166,7 +166,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error(
                         HttpStatus.UNAUTHORIZED,
-                        "Invalid email or password."
+                        "Correo electrónico o contraseña incorrectos."
                 ));
     }
 
@@ -178,7 +178,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error(
                         HttpStatus.UNAUTHORIZED,
-                        "Invalid email or password."
+                        "Correo electrónico o contraseña incorrectos."
                 ));
     }
 

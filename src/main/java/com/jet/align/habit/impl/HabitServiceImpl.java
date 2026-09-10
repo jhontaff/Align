@@ -24,7 +24,7 @@ public class HabitServiceImpl implements HabitService {
     private final HabitMapper mapper;
     private final ZoneId timezone;
 
-    private static final String HABIT_NOT_FOUND_MESSAGE = "Habit not found with id: ";
+    private static final String HABIT_NOT_FOUND_MESSAGE = "No se encontró el hábito con id: ";
 
     public HabitServiceImpl(HabitRepository habitRepository,
                             HabitMapper mapper,

@@ -19,7 +19,7 @@ public class UserMemoryServiceImpl implements UserMemoryService {
 
     private final UserMemoryRepository userMemoryRepository;
 
-    private static final String MEMORY_NOT_FOUND_MESSAGE = "Memory not found with id: ";
+    private static final String MEMORY_NOT_FOUND_MESSAGE = "No se encontró la memoria con id: ";
 
     public UserMemoryServiceImpl(UserMemoryRepository userMemoryRepository) {
         this.userMemoryRepository = userMemoryRepository;
