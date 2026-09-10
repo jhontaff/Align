@@ -24,7 +24,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write(objectMapper.writeValueAsString(
-                ApiResponse.error(HttpStatus.UNAUTHORIZED, "Authentication required.")));
+                ApiResponse.error(HttpStatus.UNAUTHORIZED, "Debe iniciar sesión para continuar.")));
     }
 
 }

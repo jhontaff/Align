@@ -10,17 +10,17 @@ import java.time.LocalTime;
 
 public record TaskRequest(
 
-            @NotBlank(message = "Title is required.")
-            @Size(max = 100, message = "Title cannot exceed 100 characters.")
+            @NotBlank(message = "El título es obligatorio.")
+            @Size(max = 100, message = "El título no puede superar los 100 caracteres.")
             String title,
 
-            @Size(max = 1000, message = "Description cannot exceed 1000 characters.")
+            @Size(max = 1000, message = "La descripción no puede superar los 1000 caracteres.")
             String description,
 
-            @NotNull(message = "Priority is required.")
+            @NotNull(message = "La prioridad es obligatoria.")
             Priority priority,
 
-            @NotNull(message = "Due date is required.")
+            @NotNull(message = "La fecha de vencimiento es obligatoria.")
             LocalDate dueDate,
             LocalTime dueTime
 

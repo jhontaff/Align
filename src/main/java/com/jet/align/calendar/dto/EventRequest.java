@@ -9,22 +9,22 @@ import java.time.LocalDateTime;
 
 public record EventRequest(
 
-        @NotBlank(message = "Title is required.")
-        @Size(max = 255, message = "Title cannot exceed 255 characters.")
+        @NotBlank(message = "El título es obligatorio.")
+        @Size(max = 255, message = "El título no puede superar los 255 caracteres.")
         String title,
 
-        @Size(max = 2000, message = "Description cannot exceed 2000 characters.")
+        @Size(max = 2000, message = "La descripción no puede superar los 2000 caracteres.")
         String description,
 
-        @NotNull(message = "Start date/time is required.")
+        @NotNull(message = "La fecha y hora de inicio son obligatorias.")
         LocalDateTime startAt,
 
         LocalDateTime endAt,
 
-        @Size(max = 255, message = "Location cannot exceed 255 characters.")
+        @Size(max = 255, message = "El lugar no puede superar los 255 caracteres.")
         String location,
 
-        @PositiveOrZero(message = "Reminder minutes must be zero or positive.")
+        @PositiveOrZero(message = "Los minutos de recordatorio deben ser cero o un número positivo.")
         Integer reminderMinutesBefore
 
 ) {}

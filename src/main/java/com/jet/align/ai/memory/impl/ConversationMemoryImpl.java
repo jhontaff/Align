@@ -65,7 +65,7 @@ public class ConversationMemoryImpl implements ConversationMemory {
         try {
             return objectMapper.readValue(json, new TypeReference<List<Message>>() {});
         } catch (Exception e) {
-            throw new AgentException("Failed to deserialize conversation history", e);
+            throw new AgentException("No se pudo leer el historial de la conversación.", e);
         }
     }
 
@@ -75,7 +75,7 @@ public class ConversationMemoryImpl implements ConversationMemory {
             return objectMapper.writerFor(new TypeReference<List<Message>>() {})
                     .writeValueAsString(messages);
         } catch (Exception e) {
-            throw new AgentException("Failed to serialize conversation history", e);
+            throw new AgentException("No se pudo guardar el historial de la conversación.", e);
         }
     }
 

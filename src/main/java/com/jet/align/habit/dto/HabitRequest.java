@@ -6,8 +6,8 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalTime;
 
 public record HabitRequest(
-        @NotBlank(message = "Name is required.")
-        @Size(max = 100, message = "Name cannot exceed 100 characters.")
+        @NotBlank(message = "El nombre es obligatorio.")
+        @Size(max = 100, message = "El nombre no puede superar los 100 caracteres.")
         String name,
 
         LocalTime scheduledTime
