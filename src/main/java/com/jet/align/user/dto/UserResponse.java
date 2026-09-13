@@ -2,6 +2,7 @@ package com.jet.align.user.dto;
 
 import com.jet.align.user.Role;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record UserResponse(
@@ -10,6 +11,8 @@ public record UserResponse(
         String email,
         String firstName,
         String lastName,
-        Role role
+        Role role,
+        Instant createdAt,
+        boolean hasAvatar
 
 ) {}

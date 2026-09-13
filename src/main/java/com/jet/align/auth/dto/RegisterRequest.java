@@ -1,9 +1,9 @@
 package com.jet.align.auth.dto;
 
+import com.jet.align.common.validation.ValidPassword;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record RegisterRequest(
@@ -12,12 +12,7 @@ public record RegisterRequest(
         @Email(message = "El correo electrónico no tiene un formato válido.")
         String email,
 
-        @NotBlank(message = "La contraseña es obligatoria.")
-        @Size(min = 8, max = 25, message = "La contraseña debe tener entre 8 y 25 caracteres.")
-        @Pattern(
-                regexp = "(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).*",
-                message = "La contraseña debe incluir al menos una minúscula, una mayúscula y un número."
-        )
+        @ValidPassword
         String password,
 
         @NotBlank(message = "La confirmación de la contraseña es obligatoria.")

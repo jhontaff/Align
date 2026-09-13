@@ -31,6 +31,9 @@ class TaskExpirationIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     UserRepository userRepository;
 
+    private static final LocalDate TODAY = LocalDate.now(ZoneOffset.UTC);
+
+
     private User user;
 
     @BeforeEach
