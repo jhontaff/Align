@@ -3,6 +3,7 @@ package com.jet.align.common.exception;
 import com.jet.align.common.response.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -10,6 +11,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -115,6 +117,38 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(
                         HttpStatus.SERVICE_UNAVAILABLE,
                         ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex) {
+
+        // La base rechazó la escritura por un constraint (UNIQUE, FK, CHECK, NOT NULL).
+        // Los servicios ya validan antes (existsByEmail, requireDueDate, ...), así que
+        // llegar acá es una carrera entre dos requests o un bug: en ambos casos el
+        // request contradice el estado actual -- 409, no un 500 "inesperado". El nombre
+        // del constraint va al log, no al cliente.
+        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(
+                        HttpStatus.CONFLICT,
+                        "La operación entra en conflicto con datos existentes."
+                ));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+
+        // Spring corta el multipart antes de llegar al controller si supera
+        // spring.servlet.multipart.max-file-size: es un 413, no un error interno.
+        return ResponseEntity
+                .status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.error(
+                        HttpStatus.PAYLOAD_TOO_LARGE,
+                        "El archivo supera el tamaño máximo permitido."
                 ));
     }
 
