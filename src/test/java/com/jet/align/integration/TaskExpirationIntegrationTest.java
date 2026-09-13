@@ -33,7 +33,6 @@ class TaskExpirationIntegrationTest extends AbstractIntegrationTest {
 
     private static final LocalDate TODAY = LocalDate.now(ZoneOffset.UTC);
 
-
     private User user;
 
     @BeforeEach
@@ -45,10 +44,10 @@ class TaskExpirationIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void expiresOverdueOpenTasksAndLeavesEverythingElseUntouched() {
-        Task overduePending = persist(TaskStatus.PENDING, LocalDate.now().minusDays(1), null);
-        Task overdueInProgress = persist(TaskStatus.IN_PROGRESS, LocalDate.now().minusDays(3), null);
-        Task dueTomorrow = persist(TaskStatus.PENDING, LocalDate.now().plusDays(1), null);
-        Task overdueButCompleted = persist(TaskStatus.COMPLETED, LocalDate.now().minusDays(5), null);
+        Task overduePending = persist(TaskStatus.PENDING, TODAY.minusDays(1), null);
+        Task overdueInProgress = persist(TaskStatus.IN_PROGRESS, TODAY.minusDays(3), null);
+        Task dueTomorrow = persist(TaskStatus.PENDING, TODAY.plusDays(1), null);
+        Task overdueButCompleted = persist(TaskStatus.COMPLETED, TODAY.minusDays(5), null);
 
         taskService.expireOverdueTasks();
 
@@ -64,9 +63,9 @@ class TaskExpirationIntegrationTest extends AbstractIntegrationTest {
         assumeTrue(now.isAfter(LocalTime.of(0, 5)) && now.isBefore(LocalTime.of(23, 55)),
                 "skipped within 5 min of midnight UTC to keep the due-time boundary deterministic");
 
-        Task pastTime = persist(TaskStatus.PENDING, LocalDate.now(), now.minusMinutes(5));
-        Task futureTime = persist(TaskStatus.PENDING, LocalDate.now(), now.plusMinutes(5));
-        Task noTime = persist(TaskStatus.PENDING, LocalDate.now(), null);
+        Task pastTime = persist(TaskStatus.PENDING, TODAY, now.minusMinutes(5));
+        Task futureTime = persist(TaskStatus.PENDING, TODAY, now.plusMinutes(5));
+        Task noTime = persist(TaskStatus.PENDING, TODAY, null);
 
         taskService.expireOverdueTasks();
 
