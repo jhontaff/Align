@@ -1,8 +1,10 @@
 package com.jet.align.auth;
 
 import com.jet.align.auth.dto.AuthResponse;
+import com.jet.align.auth.dto.ForgotPasswordRequest;
 import com.jet.align.auth.dto.LoginRequest;
 import com.jet.align.auth.dto.RegisterRequest;
+import com.jet.align.auth.dto.ResetPasswordRequest;
 import com.jet.align.common.response.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -43,5 +45,27 @@ public class AuthController {
         );
     }
 
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        authService.requestPasswordReset(request);
+
+        // Mismo 200 y mismo mensaje exista o no el email: ver AuthServiceImpl.
+        return ResponseEntity.ok(
+                ApiResponse.success(HttpStatus.OK,
+                        "Si el correo está registrado, vas a recibir un enlace para restablecer tu contraseña.",
+                        null)
+        );
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(HttpStatus.OK, "Contraseña actualizada correctamente.", null)
+        );
+    }
 
 }
