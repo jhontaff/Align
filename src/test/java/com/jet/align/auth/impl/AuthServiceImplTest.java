@@ -104,15 +104,22 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void requestPasswordReset_reemplaza_el_token_activo_anterior() {
-        PasswordResetToken previous = new PasswordResetToken();
+    void requestPasswordReset_reutiliza_la_fila_del_token_activo_anterior_en_vez_de_borrarla() {
+        PasswordResetToken previous = activeToken("viejo", Instant.now().plus(5, ChronoUnit.MINUTES));
+        String previousHash = previous.getTokenHash();
         when(userRepository.findByEmail("ana@example.com")).thenReturn(Optional.of(user));
         when(tokenRepository.findByUserAndUsedAtIsNull(user)).thenReturn(Optional.of(previous));
 
         service.requestPasswordReset(new ForgotPasswordRequest("ana@example.com"));
 
-        verify(tokenRepository).delete(previous);
-        verify(tokenRepository).save(any(PasswordResetToken.class));
+        // Misma instancia, hash nuevo: un UPDATE sobre la fila activa. Un
+        // delete + insert pegaría contra el índice único parcial, porque
+        // Hibernate flushea los INSERT antes que los DELETE.
+        ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
+        verify(tokenRepository).save(tokenCaptor.capture());
+        assertThat(tokenCaptor.getValue()).isSameAs(previous);
+        assertThat(previous.getTokenHash()).isNotEqualTo(previousHash);
+        verify(tokenRepository, never()).delete(any());
     }
 
     @Test
