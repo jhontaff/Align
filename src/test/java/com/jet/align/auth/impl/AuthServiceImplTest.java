@@ -15,6 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.thymeleaf.spring6.SpringTemplateEngine;
+import org.thymeleaf.templatemode.TemplateMode;
+import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -25,7 +28,6 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -49,6 +51,10 @@ class AuthServiceImplTest {
     // Generador real, no mock: el hash es determinista y así el test prueba de
     // punta a punta que el token del link es el que después se encuentra.
     private final PasswordResetTokenGenerator generator = new PasswordResetTokenGenerator();
+    // Engine real contra la plantilla real, tampoco mock: un mock devolvería
+    // null en process() y el cuerpo del mail quedaría fuera del test. Así la
+    // aserción del link prueba también el th:href de la plantilla.
+    private final SpringTemplateEngine templateEngine = templateEngine();
 
     private final AuthServiceImpl service = new AuthServiceImpl(
             userRepository,
@@ -59,6 +65,7 @@ class AuthServiceImplTest {
             tokenRepository,
             generator,
             emailSender,
+            templateEngine,
             TTL_MINUTES,
             FRONTEND);
 
@@ -101,6 +108,26 @@ class AuthServiceImplTest {
                 before.plus(TTL_MINUTES, ChronoUnit.MINUTES),
                 after.plus(TTL_MINUTES, ChronoUnit.MINUTES));
         assertThat(bodyCaptor.getValue()).contains(FRONTEND + "/reset-password?token=" + rawToken);
+    }
+
+    @Test
+    void requestPasswordReset_manda_el_cuerpo_renderizado_desde_la_plantilla() {
+        User named = User.builder().email("ana@example.com").firstName("Ana").build();
+        when(userRepository.findByEmail("ana@example.com")).thenReturn(Optional.of(named));
+        when(tokenRepository.findByUserAndUsedAtIsNull(named)).thenReturn(Optional.empty());
+
+        service.requestPasswordReset(new ForgotPasswordRequest("ana@example.com"));
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailSender).send(anyString(), anyString(), bodyCaptor.capture());
+        String body = bodyCaptor.getValue();
+
+        // Si alguien vuelve a concatenar el HTML a mano, o rompe una variable
+        // de la plantilla, se cae acá y no en la bandeja del usuario. La ñ de
+        // "contraseña" cubre además el encoding del resolver.
+        assertThat(body).contains("Restablecer contraseña");
+        assertThat(body).contains("Ana");
+        assertThat(body).contains(TTL_MINUTES + " minutos");
     }
 
     @Test
@@ -187,6 +214,23 @@ class AuthServiceImplTest {
     }
 
     // --- helpers -----------------------------------------------------------
+
+    /**
+     * Mismo resolver que configura {@code ThymeleafAutoConfiguration}, pero
+     * armado a mano: lee de {@code src/main/resources/templates} por classpath,
+     * así que el test sigue siendo unitario plano, sin contexto de Spring.
+     */
+    private static SpringTemplateEngine templateEngine() {
+        ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
+        resolver.setPrefix("templates/");
+        resolver.setSuffix(".html");
+        resolver.setTemplateMode(TemplateMode.HTML);
+        resolver.setCharacterEncoding("UTF-8");
+
+        SpringTemplateEngine engine = new SpringTemplateEngine();
+        engine.setTemplateResolver(resolver);
+        return engine;
+    }
 
     private PasswordResetToken activeToken(String rawToken, Instant expiresAt) {
         PasswordResetToken token = new PasswordResetToken();
