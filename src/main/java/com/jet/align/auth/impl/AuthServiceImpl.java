@@ -110,11 +110,6 @@ public class AuthServiceImpl implements AuthService {
 
         String rawToken = passwordResetTokenGenerator.generateRawToken();
 
-        // Un solo token activo por usuario (el índice único parcial de V20 lo
-        // garantiza en la base): si ya hay uno, se reutiliza la misma fila con
-        // hash y vencimiento nuevos (UPDATE). No delete + insert: Hibernate
-        // flushea los INSERT antes que los DELETE sin importar el orden del
-        // código, así que esa variante chocaba contra el índice en el commit.
         PasswordResetToken resetToken = passwordResetTokenRepository
                 .findByUserAndUsedAtIsNull(user)
                 .orElseGet(PasswordResetToken::new);
