@@ -1,15 +1,7 @@
 package com.jet.align.auth.impl;
 
-import com.jet.align.auth.AuthService;
-import com.jet.align.auth.JwtConstants;
-import com.jet.align.auth.JwtService;
-import com.jet.align.auth.PasswordResetToken;
-import com.jet.align.auth.PasswordResetTokenRepository;
-import com.jet.align.auth.dto.AuthResponse;
-import com.jet.align.auth.dto.ForgotPasswordRequest;
-import com.jet.align.auth.dto.LoginRequest;
-import com.jet.align.auth.dto.RegisterRequest;
-import com.jet.align.auth.dto.ResetPasswordRequest;
+import com.jet.align.auth.*;
+import com.jet.align.auth.dto.*;
 import com.jet.align.common.exception.BusinessException;
 import com.jet.align.common.exception.EmailDeliveryException;
 import com.jet.align.email.EmailSender;
@@ -26,9 +18,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.thymeleaf.context.Context;
+import org.thymeleaf.spring6.SpringTemplateEngine;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -47,6 +42,8 @@ public class AuthServiceImpl implements AuthService {
     private final EmailSender emailSender;
     private final Duration passwordResetTtl;
     private final String frontendBaseUrl;
+    private final SpringTemplateEngine templateEngine;
+
 
     public AuthServiceImpl(UserRepository userRepository,
                            PasswordEncoder passwordEncoder,
@@ -56,6 +53,7 @@ public class AuthServiceImpl implements AuthService {
                            PasswordResetTokenRepository passwordResetTokenRepository,
                            PasswordResetTokenGenerator passwordResetTokenGenerator,
                            EmailSender emailSender,
+                           SpringTemplateEngine templateEngine,
                            @Value("${align.password-reset.ttl-minutes}") long passwordResetTtlMinutes,
                            @Value("${align.frontend.base-url}") String frontendBaseUrl) {
         this.userRepository = userRepository;
@@ -66,6 +64,7 @@ public class AuthServiceImpl implements AuthService {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordResetTokenGenerator = passwordResetTokenGenerator;
         this.emailSender = emailSender;
+        this.templateEngine = templateEngine;
         this.passwordResetTtl = Duration.ofMinutes(passwordResetTtlMinutes);
         this.frontendBaseUrl = frontendBaseUrl;
     }
@@ -119,11 +118,10 @@ public class AuthServiceImpl implements AuthService {
         passwordResetTokenRepository.save(resetToken);
 
         try {
-            emailSender.send(user.getEmail(), "Restablecé tu contraseña de Align", buildResetEmail(rawToken));
+            emailSender.send(user.getEmail(),
+                    "Restablecé tu contraseña de Align",
+                    buildResetEmail(user.getFirstName(), rawToken));
         } catch (EmailDeliveryException e) {
-            // Si el envío falla, el request igual termina en 200: un 500 solo
-            // para emails registrados sería un oráculo de existencia. El token
-            // ya quedó guardado; el usuario puede volver a pedir el reset.
             log.error("No se pudo enviar el email de recuperación al usuario {}", user.getId(), e);
         }
     }
@@ -149,12 +147,12 @@ public class AuthServiceImpl implements AuthService {
         passwordResetTokenRepository.save(resetToken);
     }
 
-    private String buildResetEmail(String rawToken) {
-        String link = frontendBaseUrl + "/reset-password?token=" + rawToken;
-        return "<p>Recibimos una solicitud para restablecer tu contraseña. "
-                + "El enlace vence en " + passwordResetTtl.toMinutes() + " minutos.</p>"
-                + "<p><a href=\"" + link + "\">" + link + "</a></p>"
-                + "<p>Si no fuiste vos, ignorá este mensaje: tu contraseña no cambia.</p>";
-    }
+    private String buildResetEmail(String firstName, String rawToken) {
+        Context context = new Context(Locale.forLanguageTag("es"));
+        context.setVariable("firstName", firstName);
+        context.setVariable("resetLink", frontendBaseUrl + "/reset-password?token=" + rawToken);
+        context.setVariable("expiresInMinutes", passwordResetTtl.toMinutes());
 
+        return templateEngine.process("email/reset-password", context);
+    }
 }
